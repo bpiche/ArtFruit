@@ -23,7 +23,8 @@ mkdir -p "$MACOS" "$RESOURCES"
 cp ".build/release/$APP_NAME" "$MACOS/$APP_NAME"
 chmod +x "$MACOS/$APP_NAME"
 
-# Copy Info.plist and PkgInfo
+# Copy icon and Info.plist
+cp Resources/ArtFruit.icns "$RESOURCES/ArtFruit.icns"
 cp Info.plist "$CONTENTS/Info.plist"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 

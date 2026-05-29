@@ -8,6 +8,8 @@
     <string>io.github.bpiche.ArtFruit</string>
     <key>CFBundleName</key>
     <string>ArtFruit</string>
+    <key>CFBundleIconFile</key>
+    <string>ArtFruit</string>
     <key>CFBundleDisplayName</key>
     <string>ArtFruit</string>
     <key>CFBundleVersion</key>
