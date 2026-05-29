@@ -1,0 +1,75 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write   # needed to create GitHub Releases
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ArtFruit.app
+        run: |
+          cd ArtFruit
+          bash build.sh
+
+      - name: Create .zip
+        run: |
+          cd ArtFruit/.build
+          zip -r --symlinks "../../ArtFruit-${{ github.ref_name }}.zip" ArtFruit.app
+          echo "ZIP created: ArtFruit-${{ github.ref_name }}.zip"
+
+      - name: Create .dmg
+        run: |
+          # Stage the .app in a temp folder alongside an Applications symlink
+          mkdir -p /tmp/dmg-staging
+          cp -R ArtFruit/.build/ArtFruit.app /tmp/dmg-staging/
+          ln -s /Applications /tmp/dmg-staging/Applications
+
+          # Create a writable intermediate DMG, then convert to compressed read-only
+          hdiutil create \
+            -volname "ArtFruit" \
+            -srcfolder /tmp/dmg-staging \
+            -ov -format UDRW \
+            /tmp/ArtFruit-rw.dmg
+
+          hdiutil convert /tmp/ArtFruit-rw.dmg \
+            -format UDZO \
+            -o "ArtFruit-${{ github.ref_name }}.dmg"
+
+          echo "DMG created: ArtFruit-${{ github.ref_name }}.dmg"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ArtFruit ${{ github.ref_name }}"
+          body: |
+            ## ArtFruit ${{ github.ref_name }}
+
+            ### Install
+
+            **Option A — Zip:**
+            Download `ArtFruit-${{ github.ref_name }}.zip`, unzip, and drag `ArtFruit.app` to your Applications folder.
+
+            **Option B — DMG:**
+            Download `ArtFruit-${{ github.ref_name }}.dmg`, open it, and drag `ArtFruit.app` to the Applications shortcut.
+
+            ### First launch (Gatekeeper)
+            Because this app is not notarized, macOS will block it on first launch.
+            To open it anyway:
+            ```
+            xattr -dr com.apple.quarantine /Applications/ArtFruit.app
+            ```
+            Or: right-click `ArtFruit.app` → **Open** → **Open**.
+          files: |
+            ArtFruit-${{ github.ref_name }}.zip
+            ArtFruit-${{ github.ref_name }}.dmg
+          draft: false
+          prerelease: false

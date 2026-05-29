@@ -1,0 +1,7 @@
+.DS_Store
+.vscode/
+# SPM build artifacts
+**/.build/
+**/.swiftpm/
+# Local MCP server tooling
+mcp-servers/
