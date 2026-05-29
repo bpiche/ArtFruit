@@ -38,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         menu.addItem(pauseItem)
 
         menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Save Artwork…", action: #selector(saveArtwork), keyEquivalent: "s"))
+
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Preferences…", action: #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit ArtFruit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -70,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 item.title = self.viewModel.isPaused ? "Resume" : "Pause"
             }
         }
+    }
+
+    @objc private func saveArtwork() {
+        NSLog("[ArtFruit] saveArtwork() selector fired")
+        viewModel.saveCurrentArtwork()
     }
 
     @objc private func openPreferences() {

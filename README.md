@@ -1,13 +1,15 @@
 # ArtFruit
 
-A macOS menu bar app that rotates your desktop wallpaper through public domain artwork from the [Art Institute of Chicago](https://www.artic.edu) open API.
+A macOS menu bar app that rotates your desktop wallpaper through public domain artwork from the [Art Institute of Chicago](https://www.artic.edu) open API and [WikiArt](https://www.wikiart.org).
 
 ## Features
 
-- 🎨 Randomly selects from 130,000+ public domain artworks
+- 🎨 Randomly selects from 130,000+ public domain artworks (Art Institute of Chicago) + millions from WikiArt
+- 🧩 Filter by genre (Impressionism, Renaissance, Cubism, etc.)
 - 🖥️ Per-screen wallpapers sized to each display's exact pixel resolution (retina-aware)
 - 🖼️ Scale-to-fit compositing with a blurred/dimmed background fill for letterboxed art
 - ⏱️ Configurable rotation interval (15 min – 8 hours)
+- 💾 Save any artwork to ~/Downloads from the menu bar (Cmd+S) — multi-monitor aware, saves the art from the screen your cursor is on
 - ⏸️ Pause/resume from the menu bar
 - 🔔 System notifications on each new artwork
 
@@ -39,25 +41,10 @@ open .build/ArtFruit.app
 
 The app lives in the menu bar (paint palette icon). No Dock icon.
 
-## Project Structure
+## Data Sources
 
-```
-ArtFruit/
-├── Sources/
-│   ├── ArtFruitApp.swift        # Entry point
-│   ├── AppDelegate.swift        # Menu bar setup, NSStatusItem
-│   ├── ArtFruitViewModel.swift  # State, timer, fetch orchestration
-│   ├── AICAPIClient.swift       # Art Institute of Chicago REST API client
-│   ├── WallpaperService.swift   # Image compositing + NSWorkspace wallpaper
-│   └── PreferencesView.swift    # SwiftUI preferences panel
-├── Info.plist
-├── Package.swift
-└── build.sh
-```
-
-## Data Source
-
-Artwork is fetched from the [Art Institute of Chicago API](https://api.artic.edu/docs/) — all works are public domain. No API key required.
+- **[Art Institute of Chicago API](https://api.artic.edu/docs/)** — all works are public domain. No API key required.
+- **[WikiArt API](https://www.wikiart.org)** — extensive collection of visual art spanning multiple movements and genres.
 
 ## License
 

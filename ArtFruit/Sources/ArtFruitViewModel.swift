@@ -15,6 +15,7 @@ final class ArtFruitViewModel: ObservableObject {
     @Published var isPaused = false
     @Published var currentTitle: String?
     @Published var currentArtist: String?
+    @Published private(set) var currentImageURL: URL?
     @Published var changeIntervalMinutes: Double = 60 {
         didSet { rescheduleTimer() }
     }
@@ -59,6 +60,9 @@ final class ArtFruitViewModel: ObservableObject {
     private let wallpaperService = WallpaperService()
     private var timer: Timer?
 
+    /// Artwork for each screen, indexed in the same order as NSScreen.screens.
+    private var screenArtworks: [AICArtwork] = []
+
     init() {
         let saved = UserDefaults.standard.stringArray(forKey: "selectedStyles") ?? []
         selectedStyles = Set(saved)
@@ -84,19 +88,23 @@ final class ArtFruitViewModel: ObservableObject {
         Task {
             do {
                 if multiMonitor && NSScreen.screens.count > 1 {
-                    // Fetch a unique artwork for each screen in parallel
+                    // Fetch a unique artwork for each screen in parallel.
+                    // Tag each task with its screen index so we preserve ordering.
                     NSLog("[ArtFruit] Multi-monitor mode: fetching \(NSScreen.screens.count) artworks...")
                     let screens = NSScreen.screens
-                    let artworks = try await withThrowingTaskGroup(of: AICArtwork.self) { group in
-                        for _ in screens {
+                    let tagged = try await withThrowingTaskGroup(of: (Int, AICArtwork).self) { group in
+                        for index in screens.indices {
                             group.addTask { [self] in
-                                try await self.fetchOneArtwork()
+                                let artwork = try await self.fetchOneArtwork()
+                                return (index, artwork)
                             }
                         }
-                        var results: [AICArtwork] = []
-                        for try await artwork in group { results.append(artwork) }
-                        return results
+                        var pairs: [(Int, AICArtwork)] = []
+                        for try await pair in group { pairs.append(pair) }
+                        return pairs
                     }
+                    let artworks = tagged.sorted { $0.0 < $1.0 }.map(\.1)
+                    screenArtworks = artworks
                     // Apply each artwork to its corresponding screen
                     for (index, screen) in screens.enumerated() {
                         let artwork = artworks[index % artworks.count]
@@ -109,16 +117,17 @@ final class ArtFruitViewModel: ObservableObject {
                             screens: [screen]
                         )
                     }
-                    // Show the first artwork in the status display
-                    if let first = artworks.first {
-                        currentTitle = first.title
-                        currentArtist = first.artist
-                        showNotification(title: "New Artwork", body: "\(first.title) — \(first.artist)")
-                    }
+                    // Track the artwork on the primary screen
+                    let primaryArtwork = artworks[0 % artworks.count]
+                    currentTitle = primaryArtwork.title
+                    currentArtist = primaryArtwork.artist
+                    currentImageURL = primaryArtwork.imageURL
+                    showNotification(title: "New Artwork", body: "\(primaryArtwork.title) — \(primaryArtwork.artist)")
                 } else {
                     let artwork = try await fetchOneArtwork()
                     currentTitle = artwork.title
                     currentArtist = artwork.artist
+                    currentImageURL = artwork.imageURL
                     NSLog("[ArtFruit] Got artwork: \"\(artwork.title)\" by \(artwork.artist) — \(artwork.imageURL)")
                     try await wallpaperService.apply(
                         imageURL: artwork.imageURL,
@@ -133,6 +142,46 @@ final class ArtFruitViewModel: ObservableObject {
             } catch {
                 NSLog("[ArtFruit] ERROR: \(error.localizedDescription)")
                 showNotification(title: "ArtFruit Error", body: error.localizedDescription)
+            }
+        }
+    }
+
+    /// Downloads the artwork from the screen under the user's mouse to ~/Downloads.
+    func saveCurrentArtwork() {
+        let screens = NSScreen.screens
+        let mouseLocation = NSEvent.mouseLocation
+        let screenIndex = screens.firstIndex(where: {
+            $0.frame.contains(mouseLocation)
+        }) ?? 0
+
+        if multiMonitor && !screenArtworks.isEmpty, screenIndex < screenArtworks.count {
+            let artwork = screenArtworks[screenIndex]
+            let safeName = artwork.title.replacingOccurrences(of: "/", with: "-")
+            let fileURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("\(safeName) - \(artwork.artist).jpg")
+            downloadAndSave(url: artwork.imageURL, fileURL: fileURL)
+        } else {
+            guard let url = currentImageURL, let title = currentTitle, let artist = currentArtist else {
+                showNotification(title: "Download Failed", body: "No artwork to save.")
+                return
+            }
+            let safeName = title.replacingOccurrences(of: "/", with: "-")
+            let fileURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+                .appendingPathComponent("\(safeName) - \(artist).jpg")
+            downloadAndSave(url: url, fileURL: fileURL)
+        }
+    }
+
+    private func downloadAndSave(url: URL, fileURL: URL) {
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                try data.write(to: fileURL)
+                NSLog("[ArtFruit] Saved artwork to \(fileURL.path)")
+                NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+            } catch {
+                NSLog("[ArtFruit] Failed to download artwork: \(error.localizedDescription)")
+                showNotification(title: "Download Failed", body: error.localizedDescription)
             }
         }
     }
