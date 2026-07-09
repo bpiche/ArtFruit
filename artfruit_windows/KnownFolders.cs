@@ -12,11 +12,12 @@ public static class KnownFolders
     // FOLDERID_Downloads
     private static readonly Guid DownloadsGuid = new("374DE290-123F-4565-9164-39C4925E467B");
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]
-    private static extern string SHGetKnownFolderPath(
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int SHGetKnownFolderPath(
         [MarshalAs(UnmanagedType.LPStruct)] Guid rfid,
         uint dwFlags,
-        IntPtr hToken);
+        IntPtr hToken,
+        out IntPtr ppszPath);
 
     public static string Downloads
     {
@@ -24,9 +25,22 @@ public static class KnownFolders
         {
             try
             {
-                var path = SHGetKnownFolderPath(DownloadsGuid, 0, IntPtr.Zero);
-                if (!string.IsNullOrEmpty(path))
-                    return path;
+                IntPtr pPath = IntPtr.Zero;
+                try
+                {
+                    var hr = SHGetKnownFolderPath(DownloadsGuid, 0, IntPtr.Zero, out pPath);
+                    if (hr >= 0 && pPath != IntPtr.Zero)
+                    {
+                        var path = Marshal.PtrToStringUni(pPath);
+                        if (!string.IsNullOrEmpty(path))
+                            return path;
+                    }
+                }
+                finally
+                {
+                    if (pPath != IntPtr.Zero)
+                        Marshal.FreeCoTaskMem(pPath);
+                }
             }
             catch (Exception ex)
             {
