@@ -16,11 +16,19 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        const string mutexName = "Global\\io.github.bpiche.ArtFruit";
-        _singleInstanceMutex = new Mutex(initiallyOwned: true, mutexName, out var createdNew);
-        if (!createdNew)
+        const string mutexName = "Local\\io.github.bpiche.ArtFruit";
+        try
         {
-            // Another instance already owns the tray icon — exit quietly.
+            _singleInstanceMutex = new Mutex(initiallyOwned: true, mutexName, out var createdNew);
+            if (!createdNew)
+            {
+                // Another instance already owns the tray icon — exit quietly.
+                return;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Mutex exists but we don't have access; assume another instance is running.
             return;
         }
 
