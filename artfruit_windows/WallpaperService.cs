@@ -57,6 +57,10 @@ public sealed class WallpaperService
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var newFiles = new List<string>();
 
+        var canPerMonitor = monitorTargets.All(t => t.DeviceId is { Length: > 0 });
+        if (!canPerMonitor && monitorTargets.Count > 1)
+            Log.Info("Per-monitor wallpaper unavailable (missing device IDs); falling back to a single wallpaper for all monitors.");
+
         for (var i = 0; i < monitorTargets.Count; i++)
         {
             var target = monitorTargets[i];
@@ -71,9 +75,17 @@ public sealed class WallpaperService
             SaveJpeg(fitted, file);
             newFiles.Add(file);
 
-            ApplyToMonitor(target, file, i);
+            if (canPerMonitor)
+            {
+                ApplyToMonitor(target, file, i);
+            }
+            else
+            {
+                LegacyWallpaper.SetForAllMonitors(file);
+                Log.Info("Applied wallpaper via SystemParametersInfo (all monitors)");
+                break;
+            }
         }
-
         // Clean up previous wallpaper files.
         foreach (var old in _lastWallpaperFiles)
         {
