@@ -1,0 +1,356 @@
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace ArtFruit;
+
+/// <summary>
+/// The Preferences window — the WinForms port of the SwiftUI
+/// <c>PreferencesView</c>, with General / Sources / Style tabs.
+/// </summary>
+public sealed class PreferencesForm : Form
+{
+    private readonly ArtFruitViewModel _vm;
+
+    // Interval options (minutes) — matches the Swift picker.
+    private static readonly double[] Intervals = { 15, 30, 60, 120, 240, 480 };
+
+    private ComboBox _intervalCombo = null!;
+    private CheckBox _pauseCheck = null!;
+    private CheckBox _multiMonitorCheck = null!;
+    private CheckBox _showTitleCheck = null!;
+    private CheckBox _showArtistCheck = null!;
+    private Label _currentArtworkLabel = null!;
+
+    private readonly Dictionary<string, CheckBox> _styleChecks = new();
+    private readonly Dictionary<string, CheckBox> _sourceChecks = new();
+
+    // Pending selections (applied via the "Apply" buttons, mirroring the Swift UI).
+    private HashSet<string> _pendingStyles = new();
+    private HashSet<string> _pendingSources = new();
+
+    private Button _applyStylesButton = null!;
+    private Button _applySourcesButton = null!;
+
+    public PreferencesForm(ArtFruitViewModel vm)
+    {
+        _vm = vm;
+        _pendingStyles = new HashSet<string>(_vm.SelectedStyles);
+        _pendingSources = new HashSet<string>(_vm.SelectedSources);
+
+        Text = "ArtFruit Preferences";
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        ClientSize = new Size(380, 440);
+        Font = new Font("Segoe UI", 9f);
+
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.TabPages.Add(BuildGeneralTab());
+        tabs.TabPages.Add(BuildSourcesTab());
+        tabs.TabPages.Add(BuildStyleTab());
+        Controls.Add(tabs);
+
+        _vm.CurrentArtworkChanged += OnCurrentArtworkChanged;
+        FormClosed += (_, _) => _vm.CurrentArtworkChanged -= OnCurrentArtworkChanged;
+    }
+
+    // ------------------------------------------------------------------
+    // General tab
+    // ------------------------------------------------------------------
+
+    private TabPage BuildGeneralTab()
+    {
+        var page = new TabPage("General") { Padding = new Padding(16) };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoSize = true,
+        };
+
+        var intervalPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 8) };
+        intervalPanel.Controls.Add(new Label { Text = "Change artwork every:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
+        _intervalCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
+        foreach (var m in Intervals)
+            _intervalCombo.Items.Add(LabelForMinutes(m));
+        _intervalCombo.SelectedIndex = Math.Max(0, Array.IndexOf(Intervals, ClosestInterval(_vm.ChangeIntervalMinutes)));
+        _intervalCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (_intervalCombo.SelectedIndex >= 0)
+                _vm.ChangeIntervalMinutes = Intervals[_intervalCombo.SelectedIndex];
+        };
+        intervalPanel.Controls.Add(_intervalCombo);
+        layout.Controls.Add(intervalPanel);
+
+        _pauseCheck = new CheckBox { Text = "Pause artwork rotation", AutoSize = true, Checked = _vm.IsPaused, Margin = new Padding(0, 4, 0, 4) };
+        _pauseCheck.CheckedChanged += (_, _) => _vm.SetPaused(_pauseCheck.Checked);
+        layout.Controls.Add(_pauseCheck);
+
+        _multiMonitorCheck = new CheckBox { Text = "Display artwork on multiple monitors", AutoSize = true, Checked = _vm.MultiMonitor, Margin = new Padding(0, 4, 0, 4) };
+        _multiMonitorCheck.CheckedChanged += (_, _) => _vm.MultiMonitor = _multiMonitorCheck.Checked;
+        layout.Controls.Add(_multiMonitorCheck);
+
+        _showTitleCheck = new CheckBox { Text = "Display artwork title", AutoSize = true, Checked = _vm.ShowTitle, Margin = new Padding(0, 4, 0, 4) };
+        _showTitleCheck.CheckedChanged += (_, _) => _vm.ShowTitle = _showTitleCheck.Checked;
+        layout.Controls.Add(_showTitleCheck);
+
+        _showArtistCheck = new CheckBox { Text = "Display artist name", AutoSize = true, Checked = _vm.ShowArtist, Margin = new Padding(0, 4, 0, 12) };
+        _showArtistCheck.CheckedChanged += (_, _) => _vm.ShowArtist = _showArtistCheck.Checked;
+        layout.Controls.Add(_showArtistCheck);
+
+        _currentArtworkLabel = new Label
+        {
+            AutoSize = true,
+            MaximumSize = new Size(330, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 8, 0, 0),
+        };
+        UpdateCurrentArtworkLabel();
+        layout.Controls.Add(_currentArtworkLabel);
+
+        page.Controls.Add(layout);
+        return page;
+    }
+
+    // ------------------------------------------------------------------
+    // Sources tab
+    // ------------------------------------------------------------------
+
+    private TabPage BuildSourcesTab()
+    {
+        var page = new TabPage("Sources") { Padding = new Padding(16) };
+
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        root.Controls.Add(new Label
+        {
+            Text = "Fetch artwork from selected sources. Leave all unchecked for all sources.",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 8),
+        }, 0, 0);
+
+        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+        foreach (var source in ArtSources.All)
+        {
+            var cb = new CheckBox
+            {
+                Text = source,
+                AutoSize = true,
+                Checked = _pendingSources.Contains(source),
+                Margin = new Padding(0, 3, 0, 3),
+            };
+            cb.CheckedChanged += (_, _) =>
+            {
+                if (cb.Checked) _pendingSources.Add(source);
+                else _pendingSources.Remove(source);
+                UpdateStyleAvailability();
+                UpdateApplyButtons();
+            };
+            _sourceChecks[source] = cb;
+            list.Controls.Add(cb);
+        }
+        root.Controls.Add(list, 0, 1);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        var clear = new Button { Text = "Clear All", AutoSize = true };
+        clear.Click += (_, _) =>
+        {
+            _pendingSources.Clear();
+            foreach (var cb in _sourceChecks.Values) cb.Checked = false;
+            UpdateApplyButtons();
+        };
+        _applySourcesButton = new Button { Text = "Apply", AutoSize = true };
+        _applySourcesButton.Click += (_, _) =>
+        {
+            _vm.SelectedSources = new HashSet<string>(_pendingSources);
+            _vm.FetchAndApplyArtwork();
+            FlashApplied(_applySourcesButton);
+        };
+        buttons.Controls.Add(clear);
+        buttons.Controls.Add(_applySourcesButton);
+        root.Controls.Add(buttons, 0, 2);
+
+        page.Controls.Add(root);
+        UpdateApplyButtons();
+        return page;
+    }
+
+    // ------------------------------------------------------------------
+    // Style tab
+    // ------------------------------------------------------------------
+
+    private TabPage BuildStyleTab()
+    {
+        var page = new TabPage("Style") { Padding = new Padding(16) };
+
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        root.Controls.Add(new Label
+        {
+            Text = "Filter artwork by style. Leave all unchecked for any style.",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 8),
+        }, 0, 0);
+
+        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+        foreach (var style in ArtStyles.All)
+        {
+            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
+            var cb = new CheckBox
+            {
+                Text = style,
+                AutoSize = true,
+                Checked = _pendingStyles.Contains(style),
+                Margin = new Padding(0, 2, 8, 2),
+            };
+            cb.CheckedChanged += (_, _) =>
+            {
+                if (cb.Checked) _pendingStyles.Add(style);
+                else _pendingStyles.Remove(style);
+                UpdateApplyButtons();
+            };
+            _styleChecks[style] = cb;
+
+            var badge = new Label
+            {
+                Text = StyleSourceLabel(style),
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(0, 5, 0, 0),
+                Font = new Font(Font.FontFamily, 7.5f),
+            };
+
+            row.Controls.Add(cb);
+            row.Controls.Add(badge);
+            list.Controls.Add(row);
+        }
+        root.Controls.Add(list, 0, 1);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        var clear = new Button { Text = "Clear All", AutoSize = true };
+        clear.Click += (_, _) =>
+        {
+            _pendingStyles.Clear();
+            foreach (var cb in _styleChecks.Values) cb.Checked = false;
+            UpdateApplyButtons();
+        };
+        _applyStylesButton = new Button { Text = "Apply", AutoSize = true };
+        _applyStylesButton.Click += (_, _) =>
+        {
+            _vm.SelectedStyles = new HashSet<string>(_pendingStyles);
+            _vm.FetchAndApplyArtwork();
+            FlashApplied(_applyStylesButton);
+        };
+        buttons.Controls.Add(clear);
+        buttons.Controls.Add(_applyStylesButton);
+        root.Controls.Add(buttons, 0, 2);
+
+        page.Controls.Add(root);
+        UpdateStyleAvailability();
+        UpdateApplyButtons();
+        return page;
+    }
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    private void OnCurrentArtworkChanged()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(UpdateCurrentArtworkLabel);
+            return;
+        }
+        UpdateCurrentArtworkLabel();
+    }
+
+    private void UpdateCurrentArtworkLabel()
+    {
+        if (_currentArtworkLabel is null) return;
+        if (string.IsNullOrEmpty(_vm.CurrentTitle))
+        {
+            _currentArtworkLabel.Text = string.Empty;
+            return;
+        }
+
+        var text = $"Current artwork:\n{_vm.CurrentTitle}";
+        if (!string.IsNullOrEmpty(_vm.CurrentArtist))
+            text += $"\n{_vm.CurrentArtist}";
+        _currentArtworkLabel.Text = text;
+    }
+
+    /// <summary>Grays out styles whose only supporting source is unchecked (mirrors Swift's isStyleEnabled).</summary>
+    private void UpdateStyleAvailability()
+    {
+        foreach (var (style, cb) in _styleChecks)
+            cb.Enabled = IsStyleEnabled(style);
+    }
+
+    private bool IsStyleEnabled(string style)
+    {
+        if (_pendingSources.Count == 0) return true; // all sources active
+        var aicActive = _pendingSources.Contains(ArtSources.ArtInstituteOfChicago);
+        var wikiActive = _pendingSources.Contains(ArtSources.WikiArt);
+        var hasWikiArt = WikiArtApiClient.StyleSlugMap.ContainsKey(style);
+        return hasWikiArt ? (aicActive || wikiActive) : aicActive;
+    }
+
+    private void UpdateApplyButtons()
+    {
+        if (_applyStylesButton is not null)
+            _applyStylesButton.Enabled = !_pendingStyles.SetEquals(_vm.SelectedStyles);
+        if (_applySourcesButton is not null)
+            _applySourcesButton.Enabled = !_pendingSources.SetEquals(_vm.SelectedSources);
+    }
+
+    private void FlashApplied(Button button)
+    {
+        var original = button.Text;
+        button.Text = "Applied \u2713";
+        button.Enabled = false;
+        var t = new System.Windows.Forms.Timer { Interval = 2000 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            t.Dispose();
+            button.Text = original;
+            UpdateApplyButtons();
+        };
+        t.Start();
+    }
+
+    private static string StyleSourceLabel(string style) =>
+        WikiArtApiClient.StyleSlugMap.ContainsKey(style) ? "ARTIC · WikiArt" : "ARTIC";
+
+    private static string LabelForMinutes(double minutes)
+    {
+        if (minutes < 60) return $"{(int)minutes} minutes";
+        var hours = (int)(minutes / 60);
+        return hours == 1 ? "1 hour" : $"{hours} hours";
+    }
+
+    private static double ClosestInterval(double minutes)
+    {
+        var best = Intervals[0];
+        var bestDiff = double.MaxValue;
+        foreach (var m in Intervals)
+        {
+            var diff = Math.Abs(m - minutes);
+            if (diff < bestDiff) { bestDiff = diff; best = m; }
+        }
+        return best;
+    }
+}
