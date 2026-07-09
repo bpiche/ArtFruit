@@ -82,8 +82,11 @@ public sealed class WikiArtApiClient
     // Private helpers
     // ------------------------------------------------------------------
 
-    private async Task<Artwork> RandomArtworkForSlugAsync(string slug, CancellationToken ct)
+    private async Task<Artwork> RandomArtworkForSlugAsync(string slug, CancellationToken ct, int depth = 0)
     {
+        if (depth > FallbackSlugs.Length)
+            throw new NoArtworksFoundException();
+
         var firstPage = await FetchPageAsync(1, slug, ct).ConfigureAwait(false);
         if (firstPage.AllPaintingsCount <= 0)
         {
@@ -92,13 +95,13 @@ public sealed class WikiArtApiClient
             var fallbackSlug = alternatives.Count > 0
                 ? alternatives[_random.Next(alternatives.Count)]
                 : FallbackSlugs[0];
-            return await RandomArtworkForSlugAsync(fallbackSlug, ct).ConfigureAwait(false);
+            return await RandomArtworkForSlugAsync(fallbackSlug, ct, depth + 1).ConfigureAwait(false);
         }
 
-        var totalPages = Math.Min(firstPage.AllPaintingsCount / Math.Max(firstPage.PageSize, 1), 60);
+        var pageSize = Math.Max(firstPage.PageSize, 1);
+        var totalPages = Math.Min((firstPage.AllPaintingsCount + pageSize - 1) / pageSize, 60);
         var randomPage = _random.Next(1, Math.Max(totalPages, 1) + 1);
-        Log.Info($"WikiArt '{slug}': {firstPage.AllPaintingsCount} artworks, page {randomPage}/{totalPages}");
-
+        Log.Info($"WikiArt '{slug}': {firstPage.AllPaintingsCount} artworks, page {randomPage}/{Math.Max(totalPages, 1)}");
         var page = randomPage == 1 ? firstPage : await FetchPageAsync(randomPage, slug, ct).ConfigureAwait(false);
         var withImages = page.Paintings.Where(p => !string.IsNullOrEmpty(p.Image)).ToList();
 
