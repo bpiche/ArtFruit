@@ -58,6 +58,7 @@ public static class Monitors
         // Exact origin match first (most reliable).
         foreach (var m in comMonitors)
         {
+            if (m.Bounds.IsEmpty) continue;
             if (m.Bounds.Location == screenBounds.Location)
                 return m.Id;
         }
@@ -67,6 +68,7 @@ public static class Monitors
         var bestDist = int.MaxValue;
         foreach (var m in comMonitors)
         {
+            if (m.Bounds.IsEmpty) continue;
             var dx = m.Bounds.X - screenBounds.X;
             var dy = m.Bounds.Y - screenBounds.Y;
             var dist = Math.Abs(dx) + Math.Abs(dy);
