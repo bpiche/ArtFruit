@@ -177,10 +177,12 @@ public static class LegacyWallpaper
 
     public static void SetForAllMonitors(string imagePath)
     {
-        SystemParametersInfo(
+        var ok = SystemParametersInfo(
             SPI_SETDESKWALLPAPER,
             0,
             imagePath,
             SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        if (ok == 0)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
     }
 }
