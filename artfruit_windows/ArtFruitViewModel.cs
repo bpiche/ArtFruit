@@ -22,6 +22,12 @@ public sealed class ArtFruitViewModel : IDisposable
     /// <summary>Artwork applied to each screen (multi-monitor mode), same order as <see cref="Monitors.Enumerate"/>.</summary>
     private List<Artwork> _screenArtworks = new();
 
+    // Re-entrancy guard for FetchAndApplyArtwork. Only touched on the UI thread
+    // (timer tick, tray menu, Preferences) so no locking is required.
+    private bool _isFetching;
+    private bool _fetchQueued;
+
+
     // Raised whenever the "current" artwork changes so the UI can refresh.
     public event Action? CurrentArtworkChanged;
 
@@ -120,16 +126,51 @@ public sealed class ArtFruitViewModel : IDisposable
         ScheduleTimer();
     }
 
+    /// <summary>
+    /// Fetches new artwork and applies it. Safe to call from the timer tick, tray
+    /// menu, and Preferences "Apply" — a re-entrancy guard prevents overlapping
+    /// fetches. If a request arrives while a fetch is in flight (e.g. the user
+    /// changed filters), it is coalesced into a single follow-up run so the latest
+    /// settings still take effect once the current fetch completes.
+    /// </summary>
     public async void FetchAndApplyArtwork()
     {
         if (IsPaused) return;
 
+        if (_isFetching)
+        {
+            // A fetch is already running; remember that another was requested so
+            // we re-run exactly once after it finishes (rather than dropping it).
+            _fetchQueued = true;
+            return;
+        }
+
+        _isFetching = true;
+        try
+        {
+            do
+            {
+                _fetchQueued = false;
+                await FetchAndApplyCoreAsync().ConfigureAwait(true);
+                // Loop again if another request came in while we were awaiting.
+            }
+            while (_fetchQueued && !IsPaused);
+        }
+        finally
+        {
+            _isFetching = false;
+        }
+    }
+
+    private async Task FetchAndApplyCoreAsync()
+    {
         try
         {
             var targets = Monitors.Enumerate();
 
             if (MultiMonitor && targets.Count > 1)
             {
+
                 Log.Info($"Multi-monitor mode: fetching {targets.Count} artworks...");
 
                 // Fetch a unique artwork for each screen in parallel, preserving order.
