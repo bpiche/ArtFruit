@@ -126,7 +126,13 @@ public sealed class TrayApplicationContext : ApplicationContext
         {
             var iconPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ArtFruit.ico");
             if (File.Exists(iconPath))
-                return new Icon(iconPath);
+            {
+                // Ask for the frame that best matches the current tray size so the
+                // multi-resolution .ico renders crisply at any DPI (SmallIconSize
+                // already reflects the system DPI scaling).
+                var size = SystemInformation.SmallIconSize;
+                return new Icon(iconPath, size);
+            }
 
             var exePath = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exePath))
@@ -143,6 +149,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         return SystemIcons.Application;
     }
+
 
     private void Quit()
     {
