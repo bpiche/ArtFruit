@@ -48,6 +48,14 @@ final class ArtFruitViewModel: ObservableObject {
         }
     }
 
+    /// The set of artist names the user has selected in Preferences.
+    /// An empty set means "no filter — show any artist".
+    @Published var selectedArtists: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(selectedArtists), forKey: "selectedArtists")
+        }
+    }
+
     /// When true, a different artwork is fetched and applied to each connected monitor.
     @Published var multiMonitor: Bool {
         didSet {
@@ -68,6 +76,8 @@ final class ArtFruitViewModel: ObservableObject {
         selectedStyles = Set(saved)
         let savedSources = UserDefaults.standard.stringArray(forKey: "selectedSources") ?? []
         selectedSources = Set(savedSources)
+        let savedArtists = UserDefaults.standard.stringArray(forKey: "selectedArtists") ?? []
+        selectedArtists = Set(savedArtists)
         multiMonitor = UserDefaults.standard.bool(forKey: "multiMonitor")
         // Default both to true for first-time users
         let showTitleSaved = UserDefaults.standard.object(forKey: "showTitle")
@@ -197,9 +207,9 @@ final class ArtFruitViewModel: ObservableObject {
         }
         NSLog("[ArtFruit] Fetching from source: \(source)")
         if source == "WikiArt" {
-            return try await wikiArtClient.randomArtwork(styles: selectedStyles)
+            return try await wikiArtClient.randomArtwork(styles: selectedStyles, artists: selectedArtists)
         } else {
-            return try await apiClient.randomArtwork(styles: selectedStyles)
+            return try await apiClient.randomArtwork(styles: selectedStyles, artists: selectedArtists)
         }
     }
 

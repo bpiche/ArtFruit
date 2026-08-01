@@ -10,9 +10,11 @@ struct PreferencesView: View {
     @State private var applied = false
     @State private var pendingSources: Set<String> = []
     @State private var sourcesApplied = false
+    @State private var pendingArtists: Set<String> = []
+    @State private var artistsApplied = false
 
     enum Tab {
-        case general, style, sources
+        case general, style, artists, sources
     }
 
     var body: some View {
@@ -32,11 +34,17 @@ struct PreferencesView: View {
             styleTab
                 .tabItem { Label("Style", systemImage: "paintpalette") }
                 .tag(Tab.style)
+
+            // MARK: Artists tab
+            artistsTab
+                .tabItem { Label("Artists", systemImage: "person.2") }
+                .tag(Tab.artists)
         }
         .frame(width: 340, height: 370)
         .onAppear {
             pendingStyles = viewModel.selectedStyles
             pendingSources = viewModel.selectedSources
+            pendingArtists = viewModel.selectedArtists
         }
     }
 
@@ -212,6 +220,74 @@ struct PreferencesView: View {
         .padding(20)
     }
 
+    // MARK: - Artists tab content
+
+    private var artistsTab: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Filter artwork by artist. Leave all unchecked for any artist.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(AICAvailableArtists, id: \.self) { artist in
+                        HStack(spacing: 0) {
+                            Toggle(isOn: Binding(
+                                get: { pendingArtists.contains(artist) },
+                                set: { checked in
+                                    if checked {
+                                        pendingArtists.insert(artist)
+                                    } else {
+                                        pendingArtists.remove(artist)
+                                    }
+                                }
+                            )) {
+                                Text(artist)
+                                    .font(.system(size: 12))
+                            }
+                            .toggleStyle(.checkbox)
+
+                            Spacer()
+
+                            Text(artistSourceLabel(artist))
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Divider()
+
+            HStack {
+                Button("Clear All") {
+                    pendingArtists.removeAll()
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+                Spacer()
+
+                Button(artistsApplied ? "Applied ✓" : "Apply") {
+                    viewModel.selectedArtists = pendingArtists
+                    viewModel.fetchAndApplyArtwork()
+                    withAnimation { artistsApplied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        artistsApplied = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(pendingArtists == viewModel.selectedArtists)
+            }
+        }
+        .padding(20)
+    }
+
     // MARK: - Helpers
 
     private func label(for minutes: Double) -> String {
@@ -223,6 +299,11 @@ struct PreferencesView: View {
     /// Short badge shown to the right of each style row.
     private func styleSourceLabel(_ style: String) -> String {
         WikiArtStyleSlugMap[style] != nil ? "ARTIC · WikiArt" : "ARTIC"
+    }
+
+    /// Short badge shown to the right of each artist row.
+    private func artistSourceLabel(_ artist: String) -> String {
+        WikiArtArtistSlugMap[artist] != nil ? "ARTIC · WikiArt" : "ARTIC"
     }
 
     /// Returns false when every source that supports this style is unchecked in pendingSources.
