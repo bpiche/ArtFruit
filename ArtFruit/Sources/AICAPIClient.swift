@@ -9,6 +9,64 @@ struct AICArtwork: Identifiable {
     let imageURL: URL
 }
 
+// MARK: - Available artists (with known public-domain works in AIC and/or WikiArt)
+
+/// Artists available in the Art Institute of Chicago collection.
+/// The display name matches the `artist_title` field returned by the AIC API.
+let AICAvailableArtists: [String] = [
+    "Claude Monet",
+    "Pierre-Auguste Renoir",
+    "Paul Cézanne",
+    "Edgar Degas",
+    "Georges Seurat",
+    "Vincent van Gogh",
+    "Paul Gauguin",
+    "Henri de Toulouse-Lautrec",
+    "Édouard Manet",
+    "Camille Pissarro",
+    "Gustave Courbet",
+    "Eugène Delacroix",
+    "Jean-Auguste-Dominique Ingres",
+    "Francisco José de Goya y Lucientes",
+    "Rembrandt van Rijn",
+    "Johannes Vermeer",
+    "Peter Paul Rubens",
+    "El Greco",
+    "Caravaggio",
+    "Sandro Botticelli",
+    "Raphael",
+    "Leonardo da Vinci",
+    "Michelangelo Buonarroti",
+    "Albrecht Dürer",
+    "Hieronymus Bosch",
+    "Jan van Eyck",
+    "Pablo Picasso",
+    "Henri Matisse",
+    "Salvador Dalí",
+    "René Magritte",
+    "Wassily Kandinsky",
+    "Paul Klee",
+    "Piet Mondrian",
+    "Amedeo Modigliani",
+    "Marc Chagall",
+    "Egon Schiele",
+    "Gustav Klimt",
+    "Edvard Munch",
+    "James McNeill Whistler",
+    "Winslow Homer",
+    "John Singer Sargent",
+    "Mary Cassatt",
+    "Grant Wood",
+    "Georgia O'Keeffe",
+    "Edward Hopper",
+    "Jackson Pollock",
+    "Mark Rothko",
+    "Andy Warhol",
+    "Roy Lichtenstein",
+    "Utagawa Hiroshige",
+    "Katsushika Hokusai",
+]
+
 // MARK: - Available styles (sourced from AIC aggregations on public-domain artworks)
 
 let AICAvailableStyles: [String] = [
@@ -107,13 +165,14 @@ final class AICAPIClient {
         return URLSession(configuration: config)
     }()
 
-    /// Fetch a random public-domain artwork, optionally filtered to one of the given styles.
-    /// If `styles` is empty, falls back to the unfiltered paginated listing.
-    func randomArtwork(styles: Set<String> = []) async throws -> AICArtwork {
-        if styles.isEmpty {
+    /// Fetch a random public-domain artwork, optionally filtered to one of the given styles
+    /// and/or one of the given artists.
+    /// Empty sets mean "no filter — show everything".
+    func randomArtwork(styles: Set<String> = [], artists: Set<String> = []) async throws -> AICArtwork {
+        if styles.isEmpty && artists.isEmpty {
             return try await randomArtworkUnfiltered()
         } else {
-            return try await randomArtworkFiltered(styles: styles)
+            return try await randomArtworkFiltered(styles: styles, artists: artists)
         }
     }
 
@@ -155,32 +214,42 @@ final class AICAPIClient {
         return try JSONDecoder().decode(AICListResponse.self, from: data)
     }
 
-    // MARK: - Style-filtered path (search endpoint)
+    // MARK: - Style/Artist-filtered path (search endpoint)
 
-    private func randomArtworkFiltered(styles: Set<String>) async throws -> AICArtwork {
-        // Pick a random style from the selection to query, then pick a random page within it.
-        let styleList = Array(styles)
-        let chosenStyle = styleList.randomElement()!
+    private func randomArtworkFiltered(styles: Set<String>, artists: Set<String>) async throws -> AICArtwork {
+        // Build must-clauses for both style and artist filters
+        var mustClauses: [[String: Any]] = [
+            ["term": ["is_public_domain": true]],
+            ["exists": ["field": "image_id"]]
+        ]
+        if !styles.isEmpty {
+            let chosenStyle = Array(styles).randomElement()!
+            mustClauses.append(["term": ["style_title.keyword": chosenStyle]])
+            NSLog("[ArtFruit] AIC filtering by style: '\(chosenStyle)'")
+        }
+        if !artists.isEmpty {
+            let chosenArtist = Array(artists).randomElement()!
+            mustClauses.append(["match": ["artist_title": chosenArtist]])
+            NSLog("[ArtFruit] AIC filtering by artist: '\(chosenArtist)'")
+        }
 
-        // First fetch page 1 to get total count for this style
-        let firstPage = try await fetchSearchPage(1, style: chosenStyle)
+        let firstPage = try await fetchSearchPage(1, mustClauses: mustClauses)
         guard firstPage.pagination.total > 0 else {
-            NSLog("[ArtFruit] No results for style '\(chosenStyle)', falling back to unfiltered.")
+            NSLog("[ArtFruit] No results for the given filters, falling back to unfiltered.")
             return try await randomArtworkUnfiltered()
         }
 
         // Cap at 100 pages (10,000 results — Elasticsearch limit)
         let totalPages = min(firstPage.pagination.totalPages, 100)
-        NSLog("[ArtFruit] Style '\(chosenStyle)': \(firstPage.pagination.total) artworks, \(totalPages) pages")
+        NSLog("[ArtFruit] AIC filtered: \(firstPage.pagination.total) artworks, \(totalPages) pages")
 
         let randomPage = Int.random(in: 1...totalPages)
-        let page = randomPage == 1 ? firstPage : (try await fetchSearchPage(randomPage, style: chosenStyle))
+        let page = randomPage == 1 ? firstPage : (try await fetchSearchPage(randomPage, mustClauses: mustClauses))
 
         let withImages = page.data.filter { $0.imageId != nil && !($0.imageId!.isEmpty) }
         NSLog("[ArtFruit] Artworks with images on page \(randomPage): \(withImages.count)")
 
         guard let pick = withImages.randomElement(), let imageId = pick.imageId else {
-            // Fallback: try page 1 of the same style
             let fallback = firstPage.data.filter { $0.imageId != nil && !($0.imageId!.isEmpty) }
             guard let pick2 = fallback.randomElement(), let imageId2 = pick2.imageId else {
                 throw ArtFruitError.noArtworksFound
@@ -191,16 +260,11 @@ final class AICAPIClient {
         return makeArtwork(pick, imageId: imageId)
     }
 
-    private func fetchSearchPage(_ page: Int, style: String) async throws -> AICSearchResponse {
-        // Build the Elasticsearch query as a POST body
+    private func fetchSearchPage(_ page: Int, mustClauses: [[String: Any]]) async throws -> AICSearchResponse {
         let query: [String: Any] = [
             "query": [
                 "bool": [
-                    "must": [
-                        ["term": ["style_title.keyword": style]],
-                        ["term": ["is_public_domain": true]],
-                        ["exists": ["field": "image_id"]]
-                    ]
+                    "must": mustClauses
                 ]
             ],
             "fields": ["id", "title", "artist_title", "image_id"],
@@ -217,7 +281,7 @@ final class AICAPIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: query)
 
-        NSLog("[ArtFruit] Search POST for style '\(style)', page \(page)")
+        NSLog("[ArtFruit] AIC search POST page \(page)")
         let (data, response) = try await session.data(for: request)
         if let http = response as? HTTPURLResponse {
             NSLog("[ArtFruit] HTTP \(http.statusCode)")
