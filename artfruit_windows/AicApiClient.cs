@@ -25,16 +25,15 @@ public sealed class AicApiClient
     }
 
     /// <summary>
-    /// Fetch a random public-domain artwork, optionally filtered to one of the
-    /// given styles. When <paramref name="styles"/> is empty, falls back to the
-    /// unfiltered paginated listing.
+    /// Fetch a random public-domain artwork, optionally filtered by styles and/or
+    /// artists. When both sets are empty, falls back to the unfiltered paginated listing.
     /// </summary>
-    public async Task<Artwork> RandomArtworkAsync(ISet<string> styles, CancellationToken ct = default)
+    public async Task<Artwork> RandomArtworkAsync(ISet<string> styles, ISet<string> artists, CancellationToken ct = default)
     {
-        if (styles.Count == 0)
+        if (styles.Count == 0 && artists.Count == 0)
             return await RandomArtworkUnfilteredAsync(ct).ConfigureAwait(false);
 
-        return await RandomArtworkFilteredAsync(styles, ct).ConfigureAwait(false);
+        return await RandomArtworkFilteredAsync(styles, artists, ct).ConfigureAwait(false);
     }
 
     // ------------------------------------------------------------------
@@ -81,27 +80,47 @@ public sealed class AicApiClient
     }
 
     // ------------------------------------------------------------------
-    // Style-filtered path (Elasticsearch search endpoint)
+    // Style/Artist-filtered path (Elasticsearch search endpoint)
     // ------------------------------------------------------------------
 
-    private async Task<Artwork> RandomArtworkFilteredAsync(ISet<string> styles, CancellationToken ct)
+    private async Task<Artwork> RandomArtworkFilteredAsync(ISet<string> styles, ISet<string> artists, CancellationToken ct)
     {
-        var styleList = styles.ToList();
-        var chosenStyle = styleList[_random.Next(styleList.Count)];
+        // Build must-clauses combining style and artist filters.
+        var mustClauses = new List<object>
+        {
+            new { term = new Dictionary<string, object> { ["is_public_domain"] = true } },
+            new { exists = new { field = "image_id" } },
+        };
 
-        var firstPage = await FetchSearchPageAsync(1, chosenStyle, ct).ConfigureAwait(false);
+        if (styles.Count > 0)
+        {
+            var styleList = styles.ToList();
+            var chosenStyle = styleList[_random.Next(styleList.Count)];
+            mustClauses.Add(new { term = new Dictionary<string, object> { ["style_title.keyword"] = chosenStyle } });
+            Log.Info($"AIC filtering by style: '{chosenStyle}'");
+        }
+
+        if (artists.Count > 0)
+        {
+            var artistList = artists.ToList();
+            var chosenArtist = artistList[_random.Next(artistList.Count)];
+            mustClauses.Add(new { match = new Dictionary<string, object> { ["artist_title"] = chosenArtist } });
+            Log.Info($"AIC filtering by artist: '{chosenArtist}'");
+        }
+
+        var firstPage = await FetchSearchPageAsync(1, mustClauses, ct).ConfigureAwait(false);
         if (firstPage.Pagination.Total <= 0)
         {
-            Log.Info($"No results for style '{chosenStyle}', falling back to unfiltered.");
+            Log.Info("No results for the given filters, falling back to unfiltered.");
             return await RandomArtworkUnfilteredAsync(ct).ConfigureAwait(false);
         }
 
         // Cap at 100 pages (10,000 results — Elasticsearch limit).
         var totalPages = Math.Min(firstPage.Pagination.TotalPages, 100);
-        Log.Info($"Style '{chosenStyle}': {firstPage.Pagination.Total} artworks, {totalPages} pages");
+        Log.Info($"AIC filtered: {firstPage.Pagination.Total} artworks, {totalPages} pages");
 
         var randomPage = _random.Next(1, Math.Max(totalPages, 1) + 1);
-        var page = randomPage == 1 ? firstPage : await FetchSearchPageAsync(randomPage, chosenStyle, ct).ConfigureAwait(false);
+        var page = randomPage == 1 ? firstPage : await FetchSearchPageAsync(randomPage, mustClauses, ct).ConfigureAwait(false);
 
         var withImages = page.Data.Where(d => !string.IsNullOrEmpty(d.ImageId)).ToList();
         Log.Info($"Artworks with images on page {randomPage}: {withImages.Count}");
@@ -119,22 +138,13 @@ public sealed class AicApiClient
         return MakeArtwork(pick);
     }
 
-    private async Task<AicListResponse> FetchSearchPageAsync(int page, string style, CancellationToken ct)
+    private async Task<AicListResponse> FetchSearchPageAsync(int page, List<object> mustClauses, CancellationToken ct)
     {
-        // Build the Elasticsearch query as a POST body (matches the Swift version).
         var query = new
         {
             query = new
             {
-                @bool = new
-                {
-                    must = new object[]
-                    {
-                        new { term = new Dictionary<string, object> { ["style_title.keyword"] = style } },
-                        new { term = new Dictionary<string, object> { ["is_public_domain"] = true } },
-                        new { exists = new { field = "image_id" } },
-                    },
-                },
+                @bool = new { must = mustClauses },
             },
             fields = new[] { "id", "title", "artist_title", "image_id" },
             _source = new[] { "id", "title", "artist_title", "image_id" },
@@ -146,7 +156,7 @@ public sealed class AicApiClient
         var json = JsonSerializer.Serialize(query);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        Log.Info($"Search POST for style '{style}', page {page}");
+        Log.Info($"AIC search POST page {page}");
         using var response = await _http.PostAsync(url, content, ct).ConfigureAwait(false);
         Log.Info($"HTTP {(int)response.StatusCode}");
         response.EnsureSuccessStatusCode();

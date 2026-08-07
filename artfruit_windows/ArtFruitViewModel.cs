@@ -107,6 +107,12 @@ public sealed class ArtFruitViewModel : IDisposable
         set { _settings.SelectedSources = value; _settings.Save(); }
     }
 
+    public HashSet<string> SelectedArtists
+    {
+        get => _settings.SelectedArtists;
+        set { _settings.SelectedArtists = value; _settings.Save(); }
+    }
+
     public void SetPaused(bool paused)
     {
         if (IsPaused == paused) return;
@@ -294,8 +300,8 @@ public sealed class ArtFruitViewModel : IDisposable
 
         Log.Info($"Fetching from source: {source}");
         return source == ArtSources.WikiArt
-            ? await _wikiArt.RandomArtworkAsync(SelectedStyles).ConfigureAwait(true)
-            : await _aic.RandomArtworkAsync(SelectedStyles).ConfigureAwait(true);
+            ? await _wikiArt.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true)
+            : await _aic.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true);
     }
 
     private void SetCurrent(Artwork artwork)

@@ -11,7 +11,8 @@ namespace ArtFruit;
 /// </summary>
 public sealed class WikiArtApiClient
 {
-    private const string BaseUrl = "https://www.wikiart.org/en/paintings-by-style";
+    private const string StyleBaseUrl = "https://www.wikiart.org/en/paintings-by-style";
+    private const string ArtistBaseUrl = "https://www.wikiart.org/en";
 
     private readonly HttpClient _http;
     private readonly Random _random = Random.Shared;
@@ -20,6 +21,55 @@ public sealed class WikiArtApiClient
     {
         _http = http;
     }
+
+    /// <summary>Maps artist display names to WikiArt URL slugs.</summary>
+    public static readonly IReadOnlyDictionary<string, string> ArtistSlugMap = new Dictionary<string, string>
+    {
+        ["Claude Monet"] = "claude-monet",
+        ["Pierre-Auguste Renoir"] = "pierre-auguste-renoir",
+        ["Paul Cézanne"] = "paul-cezanne",
+        ["Edgar Degas"] = "edgar-degas",
+        ["Georges Seurat"] = "georges-seurat",
+        ["Vincent van Gogh"] = "vincent-van-gogh",
+        ["Paul Gauguin"] = "paul-gauguin",
+        ["Henri de Toulouse-Lautrec"] = "henri-de-toulouse-lautrec",
+        ["Édouard Manet"] = "edouard-manet",
+        ["Camille Pissarro"] = "camille-pissarro",
+        ["Gustave Courbet"] = "gustave-courbet",
+        ["Eugène Delacroix"] = "eugene-delacroix",
+        ["Jean-Auguste-Dominique Ingres"] = "jean-auguste-dominique-ingres",
+        ["Francisco José de Goya y Lucientes"] = "francisco-goya",
+        ["Rembrandt van Rijn"] = "rembrandt",
+        ["Johannes Vermeer"] = "johannes-vermeer",
+        ["Peter Paul Rubens"] = "peter-paul-rubens",
+        ["El Greco"] = "el-greco",
+        ["Caravaggio"] = "caravaggio",
+        ["Sandro Botticelli"] = "sandro-botticelli",
+        ["Raphael"] = "raphael",
+        ["Leonardo da Vinci"] = "leonardo-da-vinci",
+        ["Michelangelo Buonarroti"] = "michelangelo",
+        ["Albrecht Dürer"] = "albrecht-durer",
+        ["Hieronymus Bosch"] = "hieronymus-bosch",
+        ["Jan van Eyck"] = "jan-van-eyck",
+        ["Pablo Picasso"] = "pablo-picasso",
+        ["Henri Matisse"] = "henri-matisse",
+        ["Salvador Dalí"] = "salvador-dali",
+        ["René Magritte"] = "rene-magritte",
+        ["Wassily Kandinsky"] = "wassily-kandinsky",
+        ["Paul Klee"] = "paul-klee",
+        ["Piet Mondrian"] = "piet-mondrian",
+        ["Amedeo Modigliani"] = "amedeo-modigliani",
+        ["Marc Chagall"] = "marc-chagall",
+        ["Egon Schiele"] = "egon-schiele",
+        ["Gustav Klimt"] = "gustav-klimt",
+        ["Edvard Munch"] = "edvard-munch",
+        ["James McNeill Whistler"] = "james-mcneill-whistler",
+        ["Winslow Homer"] = "winslow-homer",
+        ["John Singer Sargent"] = "john-singer-sargent",
+        ["Mary Cassatt"] = "mary-cassatt",
+        ["Utagawa Hiroshige"] = "utagawa-hiroshige",
+        ["Katsushika Hokusai"] = "katsushika-hokusai",
+    };
 
     /// <summary>Maps AIC style names to WikiArt URL slugs.</summary>
     public static readonly IReadOnlyDictionary<string, string> StyleSlugMap = new Dictionary<string, string>
@@ -59,12 +109,26 @@ public sealed class WikiArtApiClient
     };
 
     /// <summary>
-    /// Fetch a random artwork, optionally filtered to styles from the shared
-    /// style list. Unmapped styles are ignored; falls back to a random popular
-    /// style if nothing maps.
+    /// Fetch a random artwork, optionally filtered to styles and/or artists.
+    /// Artist filter takes priority when present and mappable. Unmapped values
+    /// are ignored; falls back to a random popular style if nothing maps.
     /// </summary>
-    public async Task<Artwork> RandomArtworkAsync(ISet<string> styles, CancellationToken ct = default)
+    public async Task<Artwork> RandomArtworkAsync(ISet<string> styles, ISet<string> artists, CancellationToken ct = default)
     {
+        // Artist filter takes priority when present and mappable.
+        var mappedArtistSlugs = artists
+            .Where(a => ArtistSlugMap.ContainsKey(a))
+            .Select(a => ArtistSlugMap[a])
+            .ToList();
+
+        if (mappedArtistSlugs.Count > 0)
+        {
+            var artistSlug = mappedArtistSlugs[_random.Next(mappedArtistSlugs.Count)];
+            Log.Info($"WikiArt filtering by artist slug: '{artistSlug}'");
+            return await RandomArtworkForArtistAsync(artistSlug, ct).ConfigureAwait(false);
+        }
+
+        // Fall back to style filtering.
         var mappedSlugs = styles
             .Where(s => StyleSlugMap.ContainsKey(s))
             .Select(s => StyleSlugMap[s])
@@ -79,7 +143,56 @@ public sealed class WikiArtApiClient
     }
 
     // ------------------------------------------------------------------
-    // Private helpers
+    // Artist-filtered path
+    // ------------------------------------------------------------------
+
+    private async Task<Artwork> RandomArtworkForArtistAsync(string artistSlug, CancellationToken ct)
+    {
+        var firstPage = await FetchArtistPageAsync(1, artistSlug, ct).ConfigureAwait(false);
+        if (firstPage.AllPaintingsCount <= 0)
+        {
+            Log.Info($"WikiArt: no results for artist '{artistSlug}', falling back to style");
+            var fallbackSlug = FallbackSlugs[_random.Next(FallbackSlugs.Length)];
+            return await RandomArtworkForSlugAsync(fallbackSlug, ct).ConfigureAwait(false);
+        }
+
+        var pageSize = Math.Max(firstPage.PageSize, 1);
+        var totalPages = Math.Min((firstPage.AllPaintingsCount + pageSize - 1) / pageSize, 60);
+        var randomPage = _random.Next(1, Math.Max(totalPages, 1) + 1);
+        Log.Info($"WikiArt artist '{artistSlug}': {firstPage.AllPaintingsCount} artworks, page {randomPage}/{Math.Max(totalPages, 1)}");
+
+        var page = randomPage == 1 ? firstPage : await FetchArtistPageAsync(randomPage, artistSlug, ct).ConfigureAwait(false);
+        var withImages = page.Paintings.Where(p => !string.IsNullOrEmpty(p.Image)).ToList();
+
+        var pick = withImages.Count > 0 ? withImages[_random.Next(withImages.Count)] : null;
+        if (pick is null || !Uri.TryCreate(pick.Image, UriKind.Absolute, out var imageUrl))
+        {
+            var fallback = firstPage.Paintings.Where(p => !string.IsNullOrEmpty(p.Image)).ToList();
+            if (fallback.Count == 0) throw new NoArtworksFoundException();
+            var pick2 = fallback[_random.Next(fallback.Count)];
+            if (!Uri.TryCreate(pick2.Image, UriKind.Absolute, out var url2))
+                throw new NoArtworksFoundException();
+            return MakeArtwork(pick2, url2);
+        }
+
+        return MakeArtwork(pick, imageUrl);
+    }
+
+    private async Task<WikiArtPageResponse> FetchArtistPageAsync(int page, string artistSlug, CancellationToken ct)
+    {
+        var url = $"{ArtistBaseUrl}/{artistSlug}/all-works/text-list?json=2&layout=new&page={page}&resultType=masonry";
+        Log.Info($"WikiArt artist fetching: {url}");
+
+        using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+        Log.Info($"WikiArt HTTP {(int)response.StatusCode}");
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<WikiArtPageResponse>(JsonOpts, ct).ConfigureAwait(false);
+        return result ?? throw new NoArtworksFoundException();
+    }
+
+    // ------------------------------------------------------------------
+    // Style-filtered path
     // ------------------------------------------------------------------
 
     private async Task<Artwork> RandomArtworkForSlugAsync(string slug, CancellationToken ct, int depth = 0)
@@ -123,7 +236,7 @@ public sealed class WikiArtApiClient
 
     private async Task<WikiArtPageResponse> FetchPageAsync(int page, string slug, CancellationToken ct)
     {
-        var url = $"{BaseUrl}/{slug}?json=2&layout=new&page={page}&resultType=masonry";
+        var url = $"{StyleBaseUrl}/{slug}?json=2&layout=new&page={page}&resultType=masonry";
         Log.Info($"WikiArt fetching: {url}");
 
         using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);

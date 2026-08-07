@@ -23,19 +23,23 @@ public sealed class PreferencesForm : Form
 
     private readonly Dictionary<string, CheckBox> _styleChecks = new();
     private readonly Dictionary<string, CheckBox> _sourceChecks = new();
+    private readonly Dictionary<string, CheckBox> _artistChecks = new();
 
     // Pending selections (applied via the "Apply" buttons, mirroring the Swift UI).
     private HashSet<string> _pendingStyles = new();
     private HashSet<string> _pendingSources = new();
+    private HashSet<string> _pendingArtists = new();
 
     private Button _applyStylesButton = null!;
     private Button _applySourcesButton = null!;
+    private Button _applyArtistsButton = null!;
 
     public PreferencesForm(ArtFruitViewModel vm)
     {
         _vm = vm;
         _pendingStyles = new HashSet<string>(_vm.SelectedStyles);
         _pendingSources = new HashSet<string>(_vm.SelectedSources);
+        _pendingArtists = new HashSet<string>(_vm.SelectedArtists);
 
         Text = "ArtFruit Preferences";
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -49,6 +53,7 @@ public sealed class PreferencesForm : Form
         tabs.TabPages.Add(BuildGeneralTab());
         tabs.TabPages.Add(BuildSourcesTab());
         tabs.TabPages.Add(BuildStyleTab());
+        tabs.TabPages.Add(BuildArtistsTab());
         Controls.Add(tabs);
 
         _vm.CurrentArtworkChanged += OnCurrentArtworkChanged;
@@ -264,6 +269,86 @@ public sealed class PreferencesForm : Form
     }
 
     // ------------------------------------------------------------------
+    // Artists tab
+    // ------------------------------------------------------------------
+
+    private TabPage BuildArtistsTab()
+    {
+        var page = new TabPage("Artists") { Padding = new Padding(16) };
+
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        root.Controls.Add(new Label
+        {
+            Text = "Filter artwork by artist. Leave all unchecked for any artist.",
+            AutoSize = true,
+            MaximumSize = new Size(340, 0),
+            ForeColor = SystemColors.GrayText,
+            Margin = new Padding(0, 0, 0, 8),
+        }, 0, 0);
+
+        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+        foreach (var artist in ArtArtists.All)
+        {
+            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
+            var cb = new CheckBox
+            {
+                Text = artist,
+                AutoSize = true,
+                Checked = _pendingArtists.Contains(artist),
+                Margin = new Padding(0, 2, 8, 2),
+            };
+            cb.CheckedChanged += (_, _) =>
+            {
+                if (cb.Checked) _pendingArtists.Add(artist);
+                else _pendingArtists.Remove(artist);
+                UpdateApplyButtons();
+            };
+            _artistChecks[artist] = cb;
+
+            var badge = new Label
+            {
+                Text = ArtistSourceLabel(artist),
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Margin = new Padding(0, 5, 0, 0),
+                Font = new Font(Font.FontFamily, 7.5f),
+            };
+
+            row.Controls.Add(cb);
+            row.Controls.Add(badge);
+            list.Controls.Add(row);
+        }
+        root.Controls.Add(list, 0, 1);
+
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
+        var clear = new Button { Text = "Clear All", AutoSize = true };
+        clear.Click += (_, _) =>
+        {
+            _pendingArtists.Clear();
+            foreach (var cb in _artistChecks.Values) cb.Checked = false;
+            UpdateApplyButtons();
+        };
+        _applyArtistsButton = new Button { Text = "Apply", AutoSize = true };
+        _applyArtistsButton.Click += (_, _) =>
+        {
+            _vm.SelectedArtists = new HashSet<string>(_pendingArtists);
+            _vm.FetchAndApplyArtwork();
+            FlashApplied(_applyArtistsButton);
+        };
+        buttons.Controls.Add(clear);
+        buttons.Controls.Add(_applyArtistsButton);
+        root.Controls.Add(buttons, 0, 2);
+
+        page.Controls.Add(root);
+        UpdateApplyButtons();
+        return page;
+    }
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
@@ -314,6 +399,8 @@ public sealed class PreferencesForm : Form
             _applyStylesButton.Enabled = !_pendingStyles.SetEquals(_vm.SelectedStyles);
         if (_applySourcesButton is not null)
             _applySourcesButton.Enabled = !_pendingSources.SetEquals(_vm.SelectedSources);
+        if (_applyArtistsButton is not null)
+            _applyArtistsButton.Enabled = !_pendingArtists.SetEquals(_vm.SelectedArtists);
     }
 
     private void FlashApplied(Button button)
@@ -334,6 +421,9 @@ public sealed class PreferencesForm : Form
 
     private static string StyleSourceLabel(string style) =>
         WikiArtApiClient.StyleSlugMap.ContainsKey(style) ? "ARTIC · WikiArt" : "ARTIC";
+
+    private static string ArtistSourceLabel(string artist) =>
+        WikiArtApiClient.ArtistSlugMap.ContainsKey(artist) ? "ARTIC · WikiArt" : "ARTIC";
 
     private static string LabelForMinutes(double minutes)
     {
