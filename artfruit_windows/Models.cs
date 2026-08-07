@@ -27,6 +27,69 @@ public static class ArtSources
 }
 
 /// <summary>
+/// The artist filter list surfaced in the Preferences "Artists" tab.
+/// Matches the Swift <c>AICAvailableArtists</c> list — all have public-domain
+/// works in the Art Institute of Chicago collection.
+/// </summary>
+public static class ArtArtists
+{
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        "Claude Monet",
+        "Pierre-Auguste Renoir",
+        "Paul Cézanne",
+        "Edgar Degas",
+        "Georges Seurat",
+        "Vincent van Gogh",
+        "Paul Gauguin",
+        "Henri de Toulouse-Lautrec",
+        "Édouard Manet",
+        "Camille Pissarro",
+        "Gustave Courbet",
+        "Eugène Delacroix",
+        "Jean-Auguste-Dominique Ingres",
+        "Francisco José de Goya y Lucientes",
+        "Rembrandt van Rijn",
+        "Johannes Vermeer",
+        "Peter Paul Rubens",
+        "El Greco",
+        "Caravaggio",
+        "Sandro Botticelli",
+        "Raphael",
+        "Leonardo da Vinci",
+        "Michelangelo Buonarroti",
+        "Albrecht Dürer",
+        "Hieronymus Bosch",
+        "Jan van Eyck",
+        "Pablo Picasso",
+        "Henri Matisse",
+        "Salvador Dalí",
+        "René Magritte",
+        "Wassily Kandinsky",
+        "Paul Klee",
+        "Piet Mondrian",
+        "Amedeo Modigliani",
+        "Marc Chagall",
+        "Egon Schiele",
+        "Gustav Klimt",
+        "Edvard Munch",
+        "James McNeill Whistler",
+        "Winslow Homer",
+        "John Singer Sargent",
+        "Mary Cassatt",
+        "Grant Wood",
+        "Georgia O'Keeffe",
+        "Edward Hopper",
+        "Jackson Pollock",
+        "Mark Rothko",
+        "Andy Warhol",
+        "Roy Lichtenstein",
+        "Utagawa Hiroshige",
+        "Katsushika Hokusai",
+    };
+}
+
+/// <summary>
 /// The style filter list surfaced in the Preferences "Style" tab.
 /// Sourced from AIC aggregations on public-domain artworks (matches Swift's
 /// <c>AICAvailableStyles</c>).

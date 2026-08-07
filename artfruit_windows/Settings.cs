@@ -22,6 +22,9 @@ public sealed class Settings
     /// <summary>Empty means "use all sources".</summary>
     public HashSet<string> SelectedSources { get; set; } = new();
 
+    /// <summary>Empty means "no filter — show any artist".</summary>
+    public HashSet<string> SelectedArtists { get; set; } = new();
+
     // ------------------------------------------------------------------
     // Persistence
     // ------------------------------------------------------------------
@@ -55,6 +58,7 @@ public sealed class Settings
                     // Guard against null collections from older/partial files.
                     loaded.SelectedStyles ??= new();
                     loaded.SelectedSources ??= new();
+                    loaded.SelectedArtists ??= new();
                     return loaded;
                 }
             }
