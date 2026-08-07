@@ -20,17 +20,27 @@ jobs:
           cd ArtFruit
           bash build.sh
 
+      - name: Verify code signature
+        run: |
+          # Fail the build rather than shipping a bundle with a broken seal.
+          # A malformed signature makes macOS show the dead-end "ArtFruit.app is
+          # damaged and can't be opened" dialog, which gives users no way to proceed.
+          codesign --verify --strict --verbose=2 ArtFruit/.build/ArtFruit.app
+
       - name: Create .zip
         run: |
-          cd ArtFruit/.build
-          zip -r --symlinks "../../ArtFruit-${{ github.ref_name }}.zip" ArtFruit.app
+          # Use ditto rather than zip: it is the Apple-recommended way to archive a
+          # signed .app, preserving the code signature and extended attributes.
+          ditto -c -k --sequesterRsrc --keepParent \
+            ArtFruit/.build/ArtFruit.app \
+            "ArtFruit-${{ github.ref_name }}.zip"
           echo "ZIP created: ArtFruit-${{ github.ref_name }}.zip"
 
       - name: Create .dmg
         run: |
           # Stage the .app in a temp folder alongside an Applications symlink
           mkdir -p /tmp/dmg-staging
-          cp -R ArtFruit/.build/ArtFruit.app /tmp/dmg-staging/
+          ditto ArtFruit/.build/ArtFruit.app /tmp/dmg-staging/ArtFruit.app
           ln -s /Applications /tmp/dmg-staging/Applications
 
           # Create a writable intermediate DMG, then convert to compressed read-only
@@ -67,13 +77,34 @@ jobs:
             **Option B — DMG:**
             Download `ArtFruit-${{ github.ref_name }}.dmg`, open it, and drag `ArtFruit.app` to the Applications shortcut.
 
-            #### First launch (Gatekeeper)
-            Because this app is not notarized, macOS will block it on first launch.
-            To open it anyway:
+            #### ⚠️ First launch — please read
+
+            ArtFruit isn't notarized by Apple (that requires a paid Apple Developer
+            account), so macOS blocks it the first time. **This is expected, and it
+            only happens once.** Here's how to open it:
+
+            1. Drag `ArtFruit.app` to **Applications**, then double-click it.
+            2. macOS shows a message saying the app can't be opened. Click **Done**.
+            3. Open **System Settings** ▸ **Privacy & Security**.
+            4. Scroll down to the **Security** section. You'll see
+               *"ArtFruit.app was blocked to protect your Mac."* Click **Open Anyway**.
+            5. Confirm with **Open Anyway** and authenticate with Touch ID or your password.
+
+            ArtFruit lives in the **menu bar** (look for its icon at the top-right of
+            your screen), not the Dock — it has no window of its own.
+
+            From then on it opens normally.
+
+            > **Note:** On macOS Sequoia (15) and later, the old "right-click ▸ Open"
+            > shortcut no longer works — you must use System Settings as described above.
+
+            <details>
+            <summary>Prefer the Terminal? (optional, one command)</summary>
+
             ```
             xattr -dr com.apple.quarantine /Applications/ArtFruit.app
             ```
-            Or: right-click `ArtFruit.app` → **Open** → **Open**.
+            </details>
 
             ### Windows
 
