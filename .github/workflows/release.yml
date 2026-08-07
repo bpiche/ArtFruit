@@ -63,7 +63,21 @@ jobs:
           body: |
             ## ArtFruit ${{ github.ref_name }}
 
-            ### What's new in 1.1.3
+            ### What's new in 1.1.4
+
+            - **Fixed: "ArtFruit.app is damaged and can't be opened" on macOS** — The
+              build assembled the app bundle without re-signing it, leaving an invalid
+              code signature. macOS treats a *broken* signature more harshly than an
+              unsigned app, showing a dead-end error with no way to proceed. The bundle
+              is now correctly signed and signature-verified in CI, so first launch
+              follows the normal **Open Anyway** flow described below.
+            - macOS install instructions updated for macOS Sequoia and later, where the
+              old "right-click ▸ Open" shortcut no longer works.
+
+            > **If you downloaded 1.1.3 or earlier and hit the "damaged" error, this
+            > release fixes it — no Terminal commands needed.**
+
+            ### Previously, in 1.1.3
 
             - **Artist filter — Windows** — The Preferences window now has an **Artists** tab on Windows, matching the feature already available on macOS. Check one or more artists to limit wallpapers to their work. Artists available in both the Art Institute of Chicago and WikiArt are tagged **ARTIC · WikiArt**; others are tagged **ARTIC**. Leave all unchecked to show artwork from any artist.
 
