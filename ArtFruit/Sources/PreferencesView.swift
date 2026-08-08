@@ -95,7 +95,7 @@ struct PreferencesView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(WikiArtStyleGroups, id: \.name) { group in
                         styleGroupRow(group)
                     }
@@ -176,7 +176,7 @@ struct PreferencesView: View {
 
                 Spacer()
             }
-            .padding(.vertical, 3)
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
 
             // Expandable style list
@@ -200,7 +200,6 @@ struct PreferencesView: View {
                     }
                 }
                 .padding(.leading, 28)
-                .padding(.bottom, 4)
             }
         }
     }
@@ -217,7 +216,7 @@ struct PreferencesView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(WikiArtArtistGroups, id: \.name) { group in
                         artistGroupRow(group)
                     }
@@ -295,7 +294,7 @@ struct PreferencesView: View {
 
                 Spacer()
             }
-            .padding(.vertical, 3)
+            .padding(.vertical, 2)
             .contentShape(Rectangle())
 
             if isExpanded {
@@ -318,7 +317,6 @@ struct PreferencesView: View {
                     }
                 }
                 .padding(.leading, 28)
-                .padding(.bottom, 4)
             }
         }
     }

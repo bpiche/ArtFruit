@@ -206,7 +206,14 @@ public sealed class PreferencesForm : Form
 
     private Panel BuildStyleGroupPanel(WikiArtStyleGroup group)
     {
-        var outer = new Panel { AutoSize = true, Margin = new Padding(0, 0, 0, 1) };
+        // FlowLayoutPanel (not a plain Panel) so hidden/collapsed children are excluded from layout height.
+        var outer = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2),
+        };
 
         // --- Header row ---
         var header = new FlowLayoutPanel
@@ -228,7 +235,7 @@ public sealed class PreferencesForm : Form
             WrapContents = false,
             AutoSize = true,
             Visible = false,
-            Margin = new Padding(20, 0, 0, 4),
+            Margin = new Padding(20, 0, 0, 0),
         };
 
         foreach (var style in group.Styles)
@@ -271,25 +278,6 @@ public sealed class PreferencesForm : Form
 
         outer.Controls.Add(header);
         outer.Controls.Add(items);
-        // Stack header then items vertically
-        header.Location = new Point(0, 0);
-        items.Location  = new Point(0, header.Height > 0 ? header.Height : 24);
-        outer.Height = header.Height > 0 ? header.Height : 24;
-
-        // Reflow items below header once sizes are known
-        header.SizeChanged += (_, _) =>
-        {
-            items.Location = new Point(0, header.Height);
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
-        items.SizeChanged += (_, _) =>
-        {
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
-        items.VisibleChanged += (_, _) =>
-        {
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
 
         UpdateGroupCheckbox(groupCb, group.Styles.Select(s => s.Name).ToList(), _pendingStyles);
         return outer;
@@ -297,7 +285,14 @@ public sealed class PreferencesForm : Form
 
     private Panel BuildArtistGroupPanel(WikiArtArtistGroup group)
     {
-        var outer = new Panel { AutoSize = true, Margin = new Padding(0, 0, 0, 1) };
+        // FlowLayoutPanel (not a plain Panel) so hidden/collapsed children are excluded from layout height.
+        var outer = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2),
+        };
 
         var header = new FlowLayoutPanel
         {
@@ -317,7 +312,7 @@ public sealed class PreferencesForm : Form
             WrapContents = false,
             AutoSize = true,
             Visible = false,
-            Margin = new Padding(20, 0, 0, 4),
+            Margin = new Padding(20, 0, 0, 0),
         };
 
         foreach (var artist in group.Artists)
@@ -358,23 +353,6 @@ public sealed class PreferencesForm : Form
 
         outer.Controls.Add(header);
         outer.Controls.Add(items);
-        header.Location = new Point(0, 0);
-        items.Location  = new Point(0, header.Height > 0 ? header.Height : 24);
-        outer.Height = header.Height > 0 ? header.Height : 24;
-
-        header.SizeChanged += (_, _) =>
-        {
-            items.Location = new Point(0, header.Height);
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
-        items.SizeChanged += (_, _) =>
-        {
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
-        items.VisibleChanged += (_, _) =>
-        {
-            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
-        };
 
         UpdateGroupCheckbox(groupCb, group.Artists.Select(a => a.Name).ToList(), _pendingArtists);
         return outer;
