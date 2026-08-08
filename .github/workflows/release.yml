@@ -63,14 +63,21 @@ jobs:
           body: |
             ## ArtFruit ${{ github.ref_name }}
 
-            ### What's new in 1.1.5
+            ### What's new in 1.1.6
+
+            - **Resizable Preferences window** on both macOS and Windows — drag any edge
+              or corner to make the window larger. Useful on high-DPI / large displays
+              where the default size is too small to comfortably see the Style and Artists
+              lists. The window cannot be made smaller than the original default size.
+
+            ### Previously, in 1.1.5
 
             - **WikiArt is now the sole artwork source** — The Art Institute of Chicago
               API was removed. The AIC's image delivery server blocked non-browser
               User-Agents, making reliable operation impossible without spoofing headers.
               WikiArt has a much larger public-domain catalogue and no such restrictions.
-            - **Sources tab removed** from Preferences on both macOS and Windows — with
-              only one source there's nothing to choose between, so the tab was cleaned up.
+            - **Sources tab removed** from Preferences — with only one source there's
+              nothing to choose between, so the tab was cleaned up.
             - **Style and Artist badges** simplified — labels now show **WikiArt** where
               supported, or nothing, instead of the old ARTIC / ARTIC · WikiArt distinction.
 
