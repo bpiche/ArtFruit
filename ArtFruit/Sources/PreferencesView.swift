@@ -33,7 +33,8 @@ struct PreferencesView: View {
                 .tabItem { Label("Artists", systemImage: "person.2") }
                 .tag(Tab.artists)
         }
-        .frame(width: 340, height: 370)
+        .frame(minWidth: 340, idealWidth: 340, maxWidth: .infinity,
+               minHeight: 370, idealHeight: 370, maxHeight: .infinity)
         .onAppear {
             pendingStyles = viewModel.selectedStyles
             pendingArtists = viewModel.selectedArtists

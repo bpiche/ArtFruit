@@ -38,11 +38,12 @@ public sealed class PreferencesForm : Form
         _pendingArtists = new HashSet<string>(_vm.SelectedArtists);
 
         Text = "ArtFruit Preferences";
-        FormBorderStyle = FormBorderStyle.FixedDialog;
+        FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(380, 440);
+        MinimumSize = new Size(396, 479); // account for border/title so client area >= 380x440
         Font = new Font("Segoe UI", 9f);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
@@ -102,8 +103,8 @@ public sealed class PreferencesForm : Form
 
         _currentArtworkLabel = new Label
         {
-            AutoSize = true,
-            MaximumSize = new Size(330, 0),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
             ForeColor = SystemColors.GrayText,
             Margin = new Padding(0, 8, 0, 0),
         };
@@ -130,8 +131,8 @@ public sealed class PreferencesForm : Form
         root.Controls.Add(new Label
         {
             Text = "Filter artwork by style. Leave all unchecked for any style.",
-            AutoSize = true,
-            MaximumSize = new Size(340, 0),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
             ForeColor = SystemColors.GrayText,
             Margin = new Padding(0, 0, 0, 8),
         }, 0, 0);
@@ -210,8 +211,8 @@ public sealed class PreferencesForm : Form
         root.Controls.Add(new Label
         {
             Text = "Filter artwork by artist. Leave all unchecked for any artist.",
-            AutoSize = true,
-            MaximumSize = new Size(340, 0),
+            Dock = DockStyle.Fill,
+            AutoSize = false,
             ForeColor = SystemColors.GrayText,
             Margin = new Padding(0, 0, 0, 8),
         }, 0, 0);
