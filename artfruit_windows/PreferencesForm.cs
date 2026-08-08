@@ -4,14 +4,14 @@ using System.Windows.Forms;
 namespace ArtFruit;
 
 /// <summary>
-/// The Preferences window — the WinForms port of the SwiftUI
-/// <c>PreferencesView</c>, with General / Sources / Style tabs.
+/// The Preferences window — WinForms port of the SwiftUI <c>PreferencesView</c>.
+/// Tabs: General / Style / Artists.
+/// Style and Artists tabs show grouped collapsible sections, collapsed by default.
 /// </summary>
 public sealed class PreferencesForm : Form
 {
     private readonly ArtFruitViewModel _vm;
 
-    // Interval options (minutes) — matches the Swift picker.
     private static readonly double[] Intervals = { 15, 30, 60, 120, 240, 480 };
 
     private ComboBox _intervalCombo = null!;
@@ -21,10 +21,11 @@ public sealed class PreferencesForm : Form
     private CheckBox _showArtistCheck = null!;
     private Label _currentArtworkLabel = null!;
 
+    // style name → checkbox
     private readonly Dictionary<string, CheckBox> _styleChecks = new();
+    // artist name → checkbox
     private readonly Dictionary<string, CheckBox> _artistChecks = new();
 
-    // Pending selections (applied via the "Apply" buttons, mirroring the Swift UI).
     private HashSet<string> _pendingStyles = new();
     private HashSet<string> _pendingArtists = new();
 
@@ -34,7 +35,7 @@ public sealed class PreferencesForm : Form
     public PreferencesForm(ArtFruitViewModel vm)
     {
         _vm = vm;
-        _pendingStyles = new HashSet<string>(_vm.SelectedStyles);
+        _pendingStyles  = new HashSet<string>(_vm.SelectedStyles);
         _pendingArtists = new HashSet<string>(_vm.SelectedArtists);
 
         Text = "ArtFruit Preferences";
@@ -42,14 +43,14 @@ public sealed class PreferencesForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(380, 440);
-        MinimumSize = new Size(396, 479); // account for border/title so client area >= 380x440
+        ClientSize = new Size(400, 500);
+        MinimumSize = new Size(416, 539);
         Font = new Font("Segoe UI", 9f);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         tabs.TabPages.Add(BuildGeneralTab());
-        tabs.TabPages.Add(BuildStyleTab());
-        tabs.TabPages.Add(BuildArtistsTab());
+        tabs.TabPages.Add(BuildGroupedTab("Style",   isStyle: true));
+        tabs.TabPages.Add(BuildGroupedTab("Artists", isStyle: false));
         Controls.Add(tabs);
 
         _vm.CurrentArtworkChanged += OnCurrentArtworkChanged;
@@ -63,19 +64,12 @@ public sealed class PreferencesForm : Form
     private TabPage BuildGeneralTab()
     {
         var page = new TabPage("General") { Padding = new Padding(16) };
-
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            AutoSize = true,
-        };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, AutoSize = true };
 
         var intervalPanel = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 8) };
         intervalPanel.Controls.Add(new Label { Text = "Change artwork every:", AutoSize = true, Margin = new Padding(0, 6, 8, 0) });
         _intervalCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
-        foreach (var m in Intervals)
-            _intervalCombo.Items.Add(LabelForMinutes(m));
+        foreach (var m in Intervals) _intervalCombo.Items.Add(LabelForMinutes(m));
         _intervalCombo.SelectedIndex = Math.Max(0, Array.IndexOf(Intervals, ClosestInterval(_vm.ChangeIntervalMinutes)));
         _intervalCombo.SelectedIndexChanged += (_, _) =>
         {
@@ -101,13 +95,7 @@ public sealed class PreferencesForm : Form
         _showArtistCheck.CheckedChanged += (_, _) => _vm.ShowArtist = _showArtistCheck.Checked;
         layout.Controls.Add(_showArtistCheck);
 
-        _currentArtworkLabel = new Label
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = false,
-            ForeColor = SystemColors.GrayText,
-            Margin = new Padding(0, 8, 0, 0),
-        };
+        _currentArtworkLabel = new Label { Dock = DockStyle.Fill, AutoSize = false, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 8, 0, 0) };
         UpdateCurrentArtworkLabel();
         layout.Controls.Add(_currentArtworkLabel);
 
@@ -116,191 +104,305 @@ public sealed class PreferencesForm : Form
     }
 
     // ------------------------------------------------------------------
-    // Style tab
+    // Grouped collapsible tab (shared by Style and Artists)
     // ------------------------------------------------------------------
 
-    private TabPage BuildStyleTab()
+    private TabPage BuildGroupedTab(string tabName, bool isStyle)
     {
-        var page = new TabPage("Style") { Padding = new Padding(16) };
+        var page = new TabPage(tabName) { Padding = new Padding(8) };
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
+        var hint = isStyle
+            ? "Filter artwork by style. Leave all unchecked for any style."
+            : "Filter artwork by artist. Leave all unchecked for any artist.";
+
         root.Controls.Add(new Label
         {
-            Text = "Filter artwork by style. Leave all unchecked for any style.",
+            Text = hint,
             Dock = DockStyle.Fill,
             AutoSize = false,
             ForeColor = SystemColors.GrayText,
-            Margin = new Padding(0, 0, 0, 8),
+            Margin = new Padding(0, 0, 0, 6),
         }, 0, 0);
 
-        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        foreach (var style in ArtStyles.All)
+        // Scrollable area containing group panels
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var groupStack = new FlowLayoutPanel
         {
-            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
-            var cb = new CheckBox
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Dock = DockStyle.Top,
+        };
+        scroll.Controls.Add(groupStack);
+
+        if (isStyle)
+        {
+            foreach (var group in WikiArtData.StyleGroups)
+                groupStack.Controls.Add(BuildStyleGroupPanel(group));
+        }
+        else
+        {
+            foreach (var group in WikiArtData.ArtistGroups)
+                groupStack.Controls.Add(BuildArtistGroupPanel(group));
+        }
+
+        root.Controls.Add(scroll, 0, 1);
+
+        // Bottom buttons
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
+        var clearBtn = new Button { Text = "Clear All", AutoSize = true };
+
+        if (isStyle)
+        {
+            clearBtn.Click += (_, _) =>
             {
-                Text = style,
-                AutoSize = true,
-                Checked = _pendingStyles.Contains(style),
-                Margin = new Padding(0, 2, 8, 2),
-            };
-            cb.CheckedChanged += (_, _) =>
-            {
-                if (cb.Checked) _pendingStyles.Add(style);
-                else _pendingStyles.Remove(style);
+                _pendingStyles.Clear();
+                foreach (var cb in _styleChecks.Values) cb.Checked = false;
                 UpdateApplyButtons();
             };
-            _styleChecks[style] = cb;
-
-            var badge = new Label
+            _applyStylesButton = new Button { Text = "Apply", AutoSize = true };
+            _applyStylesButton.Click += (_, _) =>
             {
-                Text = StyleSourceLabel(style),
-                AutoSize = true,
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(0, 5, 0, 0),
-                Font = new Font(Font.FontFamily, 7.5f),
+                _vm.SelectedStyles = new HashSet<string>(_pendingStyles);
+                _vm.FetchAndApplyArtwork();
+                FlashApplied(_applyStylesButton);
             };
-
-            row.Controls.Add(cb);
-            row.Controls.Add(badge);
-            list.Controls.Add(row);
+            buttons.Controls.Add(clearBtn);
+            buttons.Controls.Add(_applyStylesButton);
         }
-        root.Controls.Add(list, 0, 1);
+        else
+        {
+            clearBtn.Click += (_, _) =>
+            {
+                _pendingArtists.Clear();
+                foreach (var cb in _artistChecks.Values) cb.Checked = false;
+                UpdateApplyButtons();
+            };
+            _applyArtistsButton = new Button { Text = "Apply", AutoSize = true };
+            _applyArtistsButton.Click += (_, _) =>
+            {
+                _vm.SelectedArtists = new HashSet<string>(_pendingArtists);
+                _vm.FetchAndApplyArtwork();
+                FlashApplied(_applyArtistsButton);
+            };
+            buttons.Controls.Add(clearBtn);
+            buttons.Controls.Add(_applyArtistsButton);
+        }
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
-        var clear = new Button { Text = "Clear All", AutoSize = true };
-        clear.Click += (_, _) =>
-        {
-            _pendingStyles.Clear();
-            foreach (var cb in _styleChecks.Values) cb.Checked = false;
-            UpdateApplyButtons();
-        };
-        _applyStylesButton = new Button { Text = "Apply", AutoSize = true };
-        _applyStylesButton.Click += (_, _) =>
-        {
-            _vm.SelectedStyles = new HashSet<string>(_pendingStyles);
-            _vm.FetchAndApplyArtwork();
-            FlashApplied(_applyStylesButton);
-        };
-        buttons.Controls.Add(clear);
-        buttons.Controls.Add(_applyStylesButton);
         root.Controls.Add(buttons, 0, 2);
-
         page.Controls.Add(root);
         UpdateApplyButtons();
         return page;
     }
 
     // ------------------------------------------------------------------
-    // Artists tab
+    // Per-group collapsible panel builders
     // ------------------------------------------------------------------
 
-    private TabPage BuildArtistsTab()
+    private Panel BuildStyleGroupPanel(WikiArtStyleGroup group)
     {
-        var page = new TabPage("Artists") { Padding = new Padding(16) };
+        var outer = new Panel { AutoSize = true, Margin = new Padding(0, 0, 0, 1) };
 
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-        root.Controls.Add(new Label
+        // --- Header row ---
+        var header = new FlowLayoutPanel
         {
-            Text = "Filter artwork by artist. Leave all unchecked for any artist.",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
-            ForeColor = SystemColors.GrayText,
-            Margin = new Padding(0, 0, 0, 8),
-        }, 0, 0);
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0),
+            Padding = new Padding(0),
+        };
 
-        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        foreach (var artist in ArtArtists.All)
+        var arrow = new Label { Text = "▶", AutoSize = true, Margin = new Padding(0, 3, 4, 0), Font = new Font(Font.FontFamily, 7f), Cursor = Cursors.Hand };
+        var groupCb = new CheckBox { Text = group.Name, AutoSize = true, Font = new Font(Font.FontFamily, 9f, FontStyle.Bold), Margin = new Padding(0, 1, 0, 1) };
+
+        // --- Items panel (hidden by default) ---
+        var items = new FlowLayoutPanel
         {
-            var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 1, 0, 1) };
-            var cb = new CheckBox
-            {
-                Text = artist,
-                AutoSize = true,
-                Checked = _pendingArtists.Contains(artist),
-                Margin = new Padding(0, 2, 8, 2),
-            };
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Visible = false,
+            Margin = new Padding(20, 0, 0, 4),
+        };
+
+        foreach (var style in group.Styles)
+        {
+            var cb = new CheckBox { Text = style.Name, AutoSize = true, Checked = _pendingStyles.Contains(style.Name), Margin = new Padding(0, 1, 0, 1) };
             cb.CheckedChanged += (_, _) =>
             {
-                if (cb.Checked) _pendingArtists.Add(artist);
-                else _pendingArtists.Remove(artist);
+                if (cb.Checked) _pendingStyles.Add(style.Name);
+                else _pendingStyles.Remove(style.Name);
+                UpdateGroupCheckbox(groupCb, group.Styles.Select(s => s.Name).ToList(), _pendingStyles);
                 UpdateApplyButtons();
             };
-            _artistChecks[artist] = cb;
-
-            var badge = new Label
-            {
-                Text = ArtistSourceLabel(artist),
-                AutoSize = true,
-                ForeColor = SystemColors.GrayText,
-                Margin = new Padding(0, 5, 0, 0),
-                Font = new Font(Font.FontFamily, 7.5f),
-            };
-
-            row.Controls.Add(cb);
-            row.Controls.Add(badge);
-            list.Controls.Add(row);
+            _styleChecks[style.Name] = cb;
+            items.Controls.Add(cb);
         }
-        root.Controls.Add(list, 0, 1);
 
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
-        var clear = new Button { Text = "Clear All", AutoSize = true };
-        clear.Click += (_, _) =>
+        // Toggle expand/collapse
+        void Toggle()
         {
-            _pendingArtists.Clear();
-            foreach (var cb in _artistChecks.Values) cb.Checked = false;
+            items.Visible = !items.Visible;
+            arrow.Text = items.Visible ? "▼" : "▶";
+        }
+        arrow.Click += (_, _) => Toggle();
+        header.Click += (_, _) => Toggle();
+
+        // Group checkbox tri-state behaviour
+        groupCb.CheckedChanged += (_, _) =>
+        {
+            if (groupCb.CheckState == CheckState.Indeterminate) return;
+            foreach (var s in group.Styles)
+            {
+                if (_styleChecks.TryGetValue(s.Name, out var cb))
+                    cb.Checked = groupCb.Checked;
+            }
             UpdateApplyButtons();
         };
-        _applyArtistsButton = new Button { Text = "Apply", AutoSize = true };
-        _applyArtistsButton.Click += (_, _) =>
-        {
-            _vm.SelectedArtists = new HashSet<string>(_pendingArtists);
-            _vm.FetchAndApplyArtwork();
-            FlashApplied(_applyArtistsButton);
-        };
-        buttons.Controls.Add(clear);
-        buttons.Controls.Add(_applyArtistsButton);
-        root.Controls.Add(buttons, 0, 2);
 
-        page.Controls.Add(root);
-        UpdateApplyButtons();
-        return page;
+        header.Controls.Add(arrow);
+        header.Controls.Add(groupCb);
+
+        outer.Controls.Add(header);
+        outer.Controls.Add(items);
+        // Stack header then items vertically
+        header.Location = new Point(0, 0);
+        items.Location  = new Point(0, header.Height > 0 ? header.Height : 24);
+        outer.Height = header.Height > 0 ? header.Height : 24;
+
+        // Reflow items below header once sizes are known
+        header.SizeChanged += (_, _) =>
+        {
+            items.Location = new Point(0, header.Height);
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+        items.SizeChanged += (_, _) =>
+        {
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+        items.VisibleChanged += (_, _) =>
+        {
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+
+        UpdateGroupCheckbox(groupCb, group.Styles.Select(s => s.Name).ToList(), _pendingStyles);
+        return outer;
+    }
+
+    private Panel BuildArtistGroupPanel(WikiArtArtistGroup group)
+    {
+        var outer = new Panel { AutoSize = true, Margin = new Padding(0, 0, 0, 1) };
+
+        var header = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            AutoSize = true,
+            Margin = new Padding(0),
+            Padding = new Padding(0),
+        };
+
+        var arrow = new Label { Text = "▶", AutoSize = true, Margin = new Padding(0, 3, 4, 0), Font = new Font(Font.FontFamily, 7f), Cursor = Cursors.Hand };
+        var groupCb = new CheckBox { Text = group.Name, AutoSize = true, Font = new Font(Font.FontFamily, 9f, FontStyle.Bold), Margin = new Padding(0, 1, 0, 1) };
+
+        var items = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoSize = true,
+            Visible = false,
+            Margin = new Padding(20, 0, 0, 4),
+        };
+
+        foreach (var artist in group.Artists)
+        {
+            var cb = new CheckBox { Text = artist.Name, AutoSize = true, Checked = _pendingArtists.Contains(artist.Name), Margin = new Padding(0, 1, 0, 1) };
+            cb.CheckedChanged += (_, _) =>
+            {
+                if (cb.Checked) _pendingArtists.Add(artist.Name);
+                else _pendingArtists.Remove(artist.Name);
+                UpdateGroupCheckbox(groupCb, group.Artists.Select(a => a.Name).ToList(), _pendingArtists);
+                UpdateApplyButtons();
+            };
+            _artistChecks[artist.Name] = cb;
+            items.Controls.Add(cb);
+        }
+
+        void Toggle()
+        {
+            items.Visible = !items.Visible;
+            arrow.Text = items.Visible ? "▼" : "▶";
+        }
+        arrow.Click += (_, _) => Toggle();
+        header.Click += (_, _) => Toggle();
+
+        groupCb.CheckedChanged += (_, _) =>
+        {
+            if (groupCb.CheckState == CheckState.Indeterminate) return;
+            foreach (var a in group.Artists)
+            {
+                if (_artistChecks.TryGetValue(a.Name, out var cb))
+                    cb.Checked = groupCb.Checked;
+            }
+            UpdateApplyButtons();
+        };
+
+        header.Controls.Add(arrow);
+        header.Controls.Add(groupCb);
+
+        outer.Controls.Add(header);
+        outer.Controls.Add(items);
+        header.Location = new Point(0, 0);
+        items.Location  = new Point(0, header.Height > 0 ? header.Height : 24);
+        outer.Height = header.Height > 0 ? header.Height : 24;
+
+        header.SizeChanged += (_, _) =>
+        {
+            items.Location = new Point(0, header.Height);
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+        items.SizeChanged += (_, _) =>
+        {
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+        items.VisibleChanged += (_, _) =>
+        {
+            outer.Height = items.Visible ? header.Height + items.Height : header.Height;
+        };
+
+        UpdateGroupCheckbox(groupCb, group.Artists.Select(a => a.Name).ToList(), _pendingArtists);
+        return outer;
     }
 
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
+    private static void UpdateGroupCheckbox(CheckBox cb, List<string> names, HashSet<string> pending)
+    {
+        var all  = names.All(n => pending.Contains(n));
+        var some = names.Any(n => pending.Contains(n));
+        cb.CheckState = all ? CheckState.Checked : some ? CheckState.Indeterminate : CheckState.Unchecked;
+    }
+
     private void OnCurrentArtworkChanged()
     {
-        if (InvokeRequired)
-        {
-            BeginInvoke(UpdateCurrentArtworkLabel);
-            return;
-        }
+        if (InvokeRequired) { BeginInvoke(UpdateCurrentArtworkLabel); return; }
         UpdateCurrentArtworkLabel();
     }
 
     private void UpdateCurrentArtworkLabel()
     {
         if (_currentArtworkLabel is null) return;
-        if (string.IsNullOrEmpty(_vm.CurrentTitle))
-        {
-            _currentArtworkLabel.Text = string.Empty;
-            return;
-        }
-
+        if (string.IsNullOrEmpty(_vm.CurrentTitle)) { _currentArtworkLabel.Text = string.Empty; return; }
         var text = $"Current artwork:\n{_vm.CurrentTitle}";
-        if (!string.IsNullOrEmpty(_vm.CurrentArtist))
-            text += $"\n{_vm.CurrentArtist}";
+        if (!string.IsNullOrEmpty(_vm.CurrentArtist)) text += $"\n{_vm.CurrentArtist}";
         _currentArtworkLabel.Text = text;
     }
 
@@ -318,21 +420,9 @@ public sealed class PreferencesForm : Form
         button.Text = "Applied \u2713";
         button.Enabled = false;
         var t = new System.Windows.Forms.Timer { Interval = 2000 };
-        t.Tick += (_, _) =>
-        {
-            t.Stop();
-            t.Dispose();
-            button.Text = original;
-            UpdateApplyButtons();
-        };
+        t.Tick += (_, _) => { t.Stop(); t.Dispose(); button.Text = original; UpdateApplyButtons(); };
         t.Start();
     }
-
-    private static string StyleSourceLabel(string style) =>
-        WikiArtApiClient.StyleSlugMap.ContainsKey(style) ? "WikiArt" : "";
-
-    private static string ArtistSourceLabel(string artist) =>
-        WikiArtApiClient.ArtistSlugMap.ContainsKey(artist) ? "WikiArt" : "";
 
     private static string LabelForMinutes(double minutes)
     {
@@ -343,13 +433,8 @@ public sealed class PreferencesForm : Form
 
     private static double ClosestInterval(double minutes)
     {
-        var best = Intervals[0];
-        var bestDiff = double.MaxValue;
-        foreach (var m in Intervals)
-        {
-            var diff = Math.Abs(m - minutes);
-            if (diff < bestDiff) { bestDiff = diff; best = m; }
-        }
+        var best = Intervals[0]; var bestDiff = double.MaxValue;
+        foreach (var m in Intervals) { var d = Math.Abs(m - minutes); if (d < bestDiff) { bestDiff = d; best = m; } }
         return best;
     }
 }
