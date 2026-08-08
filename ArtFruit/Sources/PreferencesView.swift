@@ -7,9 +7,13 @@ struct PreferencesView: View {
 
     @State private var selectedTab: Tab = .general
     @State private var pendingStyles: Set<String> = []
-    @State private var applied = false
+    @State private var stylesApplied = false
     @State private var pendingArtists: Set<String> = []
     @State private var artistsApplied = false
+
+    // Track which groups are expanded (collapsed by default)
+    @State private var expandedStyleGroups: Set<String> = []
+    @State private var expandedArtistGroups: Set<String> = []
 
     enum Tab {
         case general, style, artists
@@ -33,8 +37,8 @@ struct PreferencesView: View {
                 .tabItem { Label("Artists", systemImage: "person.2") }
                 .tag(Tab.artists)
         }
-        .frame(minWidth: 340, idealWidth: 340, maxWidth: .infinity,
-               minHeight: 370, idealHeight: 370, maxHeight: .infinity)
+        .frame(minWidth: 340, idealWidth: 380, maxWidth: .infinity,
+               minHeight: 370, idealHeight: 440, maxHeight: .infinity)
         .onAppear {
             pendingStyles = viewModel.selectedStyles
             pendingArtists = viewModel.selectedArtists
@@ -44,21 +48,18 @@ struct PreferencesView: View {
     // MARK: - General tab content
 
     private var generalTab: some View {
-            VStack(alignment: .leading, spacing: 16) {
-                Picker("Change artwork every:", selection: $viewModel.changeIntervalMinutes) {
-                    ForEach(intervals, id: \.self) { minutes in
-                        Text(label(for: minutes)).tag(minutes)
-                    }
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Change artwork every:", selection: $viewModel.changeIntervalMinutes) {
+                ForEach(intervals, id: \.self) { minutes in
+                    Text(label(for: minutes)).tag(minutes)
                 }
-                .pickerStyle(.menu)
+            }
+            .pickerStyle(.menu)
 
-                Toggle("Pause artwork rotation", isOn: $viewModel.isPaused)
-
-                Toggle("Display artwork on multiple monitors", isOn: $viewModel.multiMonitor)
-
-                Toggle("Display artwork title", isOn: $viewModel.showTitle)
-
-                Toggle("Display artist name", isOn: $viewModel.showArtist)
+            Toggle("Pause artwork rotation", isOn: $viewModel.isPaused)
+            Toggle("Display artwork on multiple monitors", isOn: $viewModel.multiMonitor)
+            Toggle("Display artwork title", isOn: $viewModel.showTitle)
+            Toggle("Display artist name", isOn: $viewModel.showArtist)
 
             if let title = viewModel.currentTitle {
                 Divider()
@@ -94,30 +95,9 @@ struct PreferencesView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(AICAvailableStyles, id: \.self) { style in
-                        HStack(spacing: 0) {
-                            Toggle(isOn: Binding(
-                                get: { pendingStyles.contains(style) },
-                                set: { checked in
-                                    if checked {
-                                        pendingStyles.insert(style)
-                                    } else {
-                                        pendingStyles.remove(style)
-                                    }
-                                }
-                            )) {
-                                Text(style)
-                                    .font(.system(size: 12))
-                            }
-                            .toggleStyle(.checkbox)
-
-                            Spacer()
-
-                            Text(styleSourceLabel(style))
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(WikiArtStyleGroups, id: \.name) { group in
+                        styleGroupRow(group)
                     }
                 }
                 .padding(.vertical, 4)
@@ -135,12 +115,12 @@ struct PreferencesView: View {
 
                 Spacer()
 
-                Button(applied ? "Applied ✓" : "Apply") {
+                Button(stylesApplied ? "Applied ✓" : "Apply") {
                     viewModel.selectedStyles = pendingStyles
                     viewModel.fetchAndApplyArtwork()
-                    withAnimation { applied = true }
+                    withAnimation { stylesApplied = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        applied = false
+                        stylesApplied = false
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -148,6 +128,81 @@ struct PreferencesView: View {
             }
         }
         .padding(20)
+    }
+
+    @ViewBuilder
+    private func styleGroupRow(_ group: WikiArtStyleGroup) -> some View {
+        let allNames = group.styles.map(\.name)
+        let allSelected = allNames.allSatisfy { pendingStyles.contains($0) }
+        let someSelected = allNames.contains { pendingStyles.contains($0) }
+        let isExpanded = expandedStyleGroups.contains(group.name)
+
+        VStack(alignment: .leading, spacing: 0) {
+            // Group header row
+            HStack(spacing: 4) {
+                // Expand/collapse arrow
+                Button(action: {
+                    if isExpanded {
+                        expandedStyleGroups.remove(group.name)
+                    } else {
+                        expandedStyleGroups.insert(group.name)
+                    }
+                }) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 14, height: 14)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                // Group-level checkbox (tri-state: all / some / none)
+                Button(action: {
+                    if allSelected {
+                        allNames.forEach { pendingStyles.remove($0) }
+                    } else {
+                        allNames.forEach { pendingStyles.insert($0) }
+                    }
+                }) {
+                    Image(systemName: allSelected ? "checkmark.square.fill"
+                                    : someSelected ? "minus.square.fill"
+                                    : "square")
+                        .font(.system(size: 13))
+                        .foregroundColor(allSelected || someSelected ? .accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+
+                Text(group.name)
+                    .font(.system(size: 12, weight: .semibold))
+
+                Spacer()
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+
+            // Expandable style list
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(group.styles, id: \.name) { style in
+                        HStack(spacing: 0) {
+                            Toggle(isOn: Binding(
+                                get: { pendingStyles.contains(style.name) },
+                                set: { checked in
+                                    if checked { pendingStyles.insert(style.name) }
+                                    else { pendingStyles.remove(style.name) }
+                                }
+                            )) {
+                                Text(style.name)
+                                    .font(.system(size: 12))
+                            }
+                            .toggleStyle(.checkbox)
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(.leading, 28)
+                .padding(.bottom, 4)
+            }
+        }
     }
 
     // MARK: - Artists tab content
@@ -162,30 +217,9 @@ struct PreferencesView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(AICAvailableArtists, id: \.self) { artist in
-                        HStack(spacing: 0) {
-                            Toggle(isOn: Binding(
-                                get: { pendingArtists.contains(artist) },
-                                set: { checked in
-                                    if checked {
-                                        pendingArtists.insert(artist)
-                                    } else {
-                                        pendingArtists.remove(artist)
-                                    }
-                                }
-                            )) {
-                                Text(artist)
-                                    .font(.system(size: 12))
-                            }
-                            .toggleStyle(.checkbox)
-
-                            Spacer()
-
-                            Text(artistSourceLabel(artist))
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(WikiArtArtistGroups, id: \.name) { group in
+                        artistGroupRow(group)
                     }
                 }
                 .padding(.vertical, 4)
@@ -218,21 +252,82 @@ struct PreferencesView: View {
         .padding(20)
     }
 
+    @ViewBuilder
+    private func artistGroupRow(_ group: WikiArtArtistGroup) -> some View {
+        let allNames = group.artists.map(\.name)
+        let allSelected = allNames.allSatisfy { pendingArtists.contains($0) }
+        let someSelected = allNames.contains { pendingArtists.contains($0) }
+        let isExpanded = expandedArtistGroups.contains(group.name)
+
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                Button(action: {
+                    if isExpanded {
+                        expandedArtistGroups.remove(group.name)
+                    } else {
+                        expandedArtistGroups.insert(group.name)
+                    }
+                }) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 14, height: 14)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {
+                    if allSelected {
+                        allNames.forEach { pendingArtists.remove($0) }
+                    } else {
+                        allNames.forEach { pendingArtists.insert($0) }
+                    }
+                }) {
+                    Image(systemName: allSelected ? "checkmark.square.fill"
+                                    : someSelected ? "minus.square.fill"
+                                    : "square")
+                        .font(.system(size: 13))
+                        .foregroundColor(allSelected || someSelected ? .accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+
+                Text(group.name)
+                    .font(.system(size: 12, weight: .semibold))
+
+                Spacer()
+            }
+            .padding(.vertical, 3)
+            .contentShape(Rectangle())
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(group.artists, id: \.name) { artist in
+                        HStack(spacing: 0) {
+                            Toggle(isOn: Binding(
+                                get: { pendingArtists.contains(artist.name) },
+                                set: { checked in
+                                    if checked { pendingArtists.insert(artist.name) }
+                                    else { pendingArtists.remove(artist.name) }
+                                }
+                            )) {
+                                Text(artist.name)
+                                    .font(.system(size: 12))
+                            }
+                            .toggleStyle(.checkbox)
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(.leading, 28)
+                .padding(.bottom, 4)
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private func label(for minutes: Double) -> String {
         if minutes < 60 { return "\(Int(minutes)) minutes" }
         let hours = Int(minutes / 60)
         return hours == 1 ? "1 hour" : "\(hours) hours"
-    }
-
-    /// Short badge shown to the right of each style row.
-    private func styleSourceLabel(_ style: String) -> String {
-        WikiArtStyleSlugMap[style] != nil ? "WikiArt" : ""
-    }
-
-    /// Short badge shown to the right of each artist row.
-    private func artistSourceLabel(_ artist: String) -> String {
-        WikiArtArtistSlugMap[artist] != nil ? "WikiArt" : ""
     }
 }
