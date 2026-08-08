@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let hosting = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: hosting)
             window.title = "ArtFruit Preferences"
-            window.styleMask = [.titled, .closable]
+            window.styleMask = [.titled, .closable, .resizable]
             // Center the title by balancing the traffic-light buttons with an
             // equivalent invisible spacer on the right side of the title bar.
             window.titlebarAppearsTransparent = false
@@ -98,7 +98,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let toolbar = NSToolbar(identifier: "PreferencesToolbar")
             toolbar.showsBaselineSeparator = false
             window.toolbar = toolbar
-            window.setContentSize(NSSize(width: 340, height: 320))
+            window.setContentSize(NSSize(width: 340, height: 370))
+            window.minSize = NSSize(width: 340, height: 370)
             window.center()
             preferencesWindow = window
         }
