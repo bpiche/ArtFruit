@@ -45,7 +45,10 @@ public sealed class ArtFruitViewModel : IDisposable
         {
             Timeout = TimeSpan.FromSeconds(60),
         };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("ArtFruit/1.0 (+https://github.com/bpiche/ArtFruit)");
+        // Use Add() instead of UserAgent.ParseAdd() so the raw string is sent verbatim.
+        // ParseAdd() rejects the '+' in the URL comment and can silently drop the header,
+        // leaving requests with no User-Agent which causes a 403 from the AIC API.
+        _http.DefaultRequestHeaders.Add("User-Agent", "ArtFruit/1.0 (https://github.com/bpiche/ArtFruit)");
 
         _aic = new AicApiClient(_http);
         _wikiArt = new WikiArtApiClient(_http);
