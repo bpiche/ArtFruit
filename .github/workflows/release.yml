@@ -63,7 +63,15 @@ jobs:
           body: |
             ## ArtFruit ${{ github.ref_name }}
 
-            ### What's new in 1.1.7
+            ### What's new in 1.1.8
+
+            - **Artists are now sorted by last name** — within each letter section of the
+              Artist filter, artists are ordered by surname rather than first name, so
+              *Ansel Adams* files under **A**dams and *Vincent van Gogh* under **G**ogh.
+              This matches how WikiArt's own A–Z index groups them, making a given artist
+              far easier to find in a 3,500-entry list. Applies to both macOS and Windows.
+
+            ### Previously, in 1.1.7
 
             - **Full WikiArt style taxonomy** — the Style filter in Preferences now covers
               WikiArt's complete style list, grouped into collapsible categories (Modern &
