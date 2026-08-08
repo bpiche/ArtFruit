@@ -11,8 +11,6 @@ namespace ArtFruit;
 public sealed class ArtFruitViewModel : IDisposable
 {
     private readonly HttpClient _http;
-    private readonly HttpClient _imageHttp; // separate client for image downloads (no custom UA)
-    private readonly AicApiClient _aic;
     private readonly WikiArtApiClient _wikiArt;
     private readonly WallpaperService _wallpaper;
     private readonly System.Windows.Forms.Timer _timer;
@@ -44,24 +42,11 @@ public sealed class ArtFruitViewModel : IDisposable
 
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(60),
-        };
-        // Use Add() instead of UserAgent.ParseAdd() so the raw string is sent verbatim.
-        // ParseAdd() rejects the '+' in the URL comment and can silently drop the header,
-        // leaving requests with no User-Agent which causes a 403 from the AIC JSON API.
-        _http.DefaultRequestHeaders.Add("User-Agent", "ArtFruit/1.0 (https://github.com/bpiche/ArtFruit)");
-
-        // Separate client with NO custom User-Agent for image downloads.
-        // The AIC IIIF image server (www.artic.edu/iiif/2) blocks requests with
-        // non-browser User-Agents via its WAF, but allows requests with no UA at all.
-        _imageHttp = new HttpClient
-        {
             Timeout = TimeSpan.FromSeconds(120),
         };
 
-        _aic = new AicApiClient(_http);
         _wikiArt = new WikiArtApiClient(_http);
-        _wallpaper = new WallpaperService(_imageHttp);
+        _wallpaper = new WallpaperService(_http);
 
         _timer = new System.Windows.Forms.Timer();
         _timer.Tick += (_, _) => FetchAndApplyArtwork();
@@ -248,7 +233,7 @@ public sealed class ArtFruitViewModel : IDisposable
             var downloads = KnownFolders.Downloads;
             var filePath = Path.Combine(downloads, $"{safeName}.jpg");
 
-            var data = await _imageHttp.GetByteArrayAsync(artwork.ImageUrl).ConfigureAwait(true);
+            var data = await _http.GetByteArrayAsync(artwork.ImageUrl).ConfigureAwait(true);
             await File.WriteAllBytesAsync(filePath, data).ConfigureAwait(true);
             Log.Info($"Saved artwork to {filePath}");
 
@@ -299,21 +284,8 @@ public sealed class ArtFruitViewModel : IDisposable
 
     private async Task<Artwork> FetchOneArtworkAsync()
     {
-        string source;
-        if (SelectedSources.Count == 0)
-        {
-            source = ArtSources.All[_random.Next(ArtSources.All.Count)];
-        }
-        else
-        {
-            var list = SelectedSources.ToList();
-            source = list[_random.Next(list.Count)];
-        }
-
-        Log.Info($"Fetching from source: {source}");
-        return source == ArtSources.WikiArt
-            ? await _wikiArt.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true)
-            : await _aic.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true);
+        Log.Info("Fetching from WikiArt...");
+        return await _wikiArt.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true);
     }
 
     private void SetCurrent(Artwork artwork)
@@ -349,6 +321,5 @@ public sealed class ArtFruitViewModel : IDisposable
     {
         _timer.Dispose();
         _http.Dispose();
-        _imageHttp.Dispose();
     }
 }
