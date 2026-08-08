@@ -63,7 +63,18 @@ jobs:
           body: |
             ## ArtFruit ${{ github.ref_name }}
 
-            ### What's new in 1.1.6
+            ### What's new in 1.1.7
+
+            - **Full WikiArt style taxonomy** — the Style filter in Preferences now covers
+              WikiArt's complete style list, grouped into collapsible categories (Modern &
+              Contemporary, Renaissance & Baroque, Ancient, and more) with a checkbox per
+              style, on both macOS and Windows.
+            - **Full WikiArt artist index** — the Artist filter now covers WikiArt's
+              complete A–Z artist index (3,500+ artists, up from ~130), grouped into
+              collapsible letter sections matching the Style tab's UI, on both macOS and
+              Windows.
+
+            ### Previously, in 1.1.6
 
             - **Resizable Preferences window** on both macOS and Windows — drag any edge
               or corner to make the window larger. Useful on high-DPI / large displays
@@ -80,17 +91,6 @@ jobs:
               nothing to choose between, so the tab was cleaned up.
             - **Style and Artist badges** simplified — labels now show **WikiArt** where
               supported, or nothing, instead of the old ARTIC / ARTIC · WikiArt distinction.
-
-            ### Previously, in 1.1.4
-
-            - **Fixed: "ArtFruit.app is damaged and can't be opened" on macOS** — The
-              build assembled the app bundle without re-signing it, leaving an invalid
-              code signature. macOS treats a *broken* signature more harshly than an
-              unsigned app, showing a dead-end error with no way to proceed. The bundle
-              is now correctly signed and signature-verified in CI, so first launch
-              follows the normal **Open Anyway** flow described below.
-            - macOS install instructions updated for macOS Sequoia and later, where the
-              old "right-click ▸ Open" shortcut no longer works.
 
             ---
 
