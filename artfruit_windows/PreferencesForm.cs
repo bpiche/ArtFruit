@@ -22,23 +22,19 @@ public sealed class PreferencesForm : Form
     private Label _currentArtworkLabel = null!;
 
     private readonly Dictionary<string, CheckBox> _styleChecks = new();
-    private readonly Dictionary<string, CheckBox> _sourceChecks = new();
     private readonly Dictionary<string, CheckBox> _artistChecks = new();
 
     // Pending selections (applied via the "Apply" buttons, mirroring the Swift UI).
     private HashSet<string> _pendingStyles = new();
-    private HashSet<string> _pendingSources = new();
     private HashSet<string> _pendingArtists = new();
 
     private Button _applyStylesButton = null!;
-    private Button _applySourcesButton = null!;
     private Button _applyArtistsButton = null!;
 
     public PreferencesForm(ArtFruitViewModel vm)
     {
         _vm = vm;
         _pendingStyles = new HashSet<string>(_vm.SelectedStyles);
-        _pendingSources = new HashSet<string>(_vm.SelectedSources);
         _pendingArtists = new HashSet<string>(_vm.SelectedArtists);
 
         Text = "ArtFruit Preferences";
@@ -51,7 +47,6 @@ public sealed class PreferencesForm : Form
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         tabs.TabPages.Add(BuildGeneralTab());
-        tabs.TabPages.Add(BuildSourcesTab());
         tabs.TabPages.Add(BuildStyleTab());
         tabs.TabPages.Add(BuildArtistsTab());
         Controls.Add(tabs);
@@ -116,74 +111,6 @@ public sealed class PreferencesForm : Form
         layout.Controls.Add(_currentArtworkLabel);
 
         page.Controls.Add(layout);
-        return page;
-    }
-
-    // ------------------------------------------------------------------
-    // Sources tab
-    // ------------------------------------------------------------------
-
-    private TabPage BuildSourcesTab()
-    {
-        var page = new TabPage("Sources") { Padding = new Padding(16) };
-
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-        root.Controls.Add(new Label
-        {
-            Text = "Fetch artwork from selected sources. Leave all unchecked for all sources.",
-            AutoSize = true,
-            MaximumSize = new Size(340, 0),
-            ForeColor = SystemColors.GrayText,
-            Margin = new Padding(0, 0, 0, 8),
-        }, 0, 0);
-
-        var list = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        foreach (var source in ArtSources.All)
-        {
-            var cb = new CheckBox
-            {
-                Text = source,
-                AutoSize = true,
-                Checked = _pendingSources.Contains(source),
-                Margin = new Padding(0, 3, 0, 3),
-            };
-            cb.CheckedChanged += (_, _) =>
-            {
-                if (cb.Checked) _pendingSources.Add(source);
-                else _pendingSources.Remove(source);
-                UpdateStyleAvailability();
-                UpdateApplyButtons();
-            };
-            _sourceChecks[source] = cb;
-            list.Controls.Add(cb);
-        }
-        root.Controls.Add(list, 0, 1);
-
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
-        var clear = new Button { Text = "Clear All", AutoSize = true };
-        clear.Click += (_, _) =>
-        {
-            _pendingSources.Clear();
-            foreach (var cb in _sourceChecks.Values) cb.Checked = false;
-            UpdateApplyButtons();
-        };
-        _applySourcesButton = new Button { Text = "Apply", AutoSize = true };
-        _applySourcesButton.Click += (_, _) =>
-        {
-            _vm.SelectedSources = new HashSet<string>(_pendingSources);
-            _vm.FetchAndApplyArtwork();
-            FlashApplied(_applySourcesButton);
-        };
-        buttons.Controls.Add(clear);
-        buttons.Controls.Add(_applySourcesButton);
-        root.Controls.Add(buttons, 0, 2);
-
-        page.Controls.Add(root);
-        UpdateApplyButtons();
         return page;
     }
 
@@ -263,7 +190,6 @@ public sealed class PreferencesForm : Form
         root.Controls.Add(buttons, 0, 2);
 
         page.Controls.Add(root);
-        UpdateStyleAvailability();
         UpdateApplyButtons();
         return page;
     }
@@ -377,28 +303,10 @@ public sealed class PreferencesForm : Form
         _currentArtworkLabel.Text = text;
     }
 
-    /// <summary>Grays out styles whose only supporting source is unchecked (mirrors Swift's isStyleEnabled).</summary>
-    private void UpdateStyleAvailability()
-    {
-        foreach (var (style, cb) in _styleChecks)
-            cb.Enabled = IsStyleEnabled(style);
-    }
-
-    private bool IsStyleEnabled(string style)
-    {
-        if (_pendingSources.Count == 0) return true; // all sources active
-        var aicActive = _pendingSources.Contains(ArtSources.ArtInstituteOfChicago);
-        var wikiActive = _pendingSources.Contains(ArtSources.WikiArt);
-        var hasWikiArt = WikiArtApiClient.StyleSlugMap.ContainsKey(style);
-        return hasWikiArt ? (aicActive || wikiActive) : aicActive;
-    }
-
     private void UpdateApplyButtons()
     {
         if (_applyStylesButton is not null)
             _applyStylesButton.Enabled = !_pendingStyles.SetEquals(_vm.SelectedStyles);
-        if (_applySourcesButton is not null)
-            _applySourcesButton.Enabled = !_pendingSources.SetEquals(_vm.SelectedSources);
         if (_applyArtistsButton is not null)
             _applyArtistsButton.Enabled = !_pendingArtists.SetEquals(_vm.SelectedArtists);
     }
@@ -420,10 +328,10 @@ public sealed class PreferencesForm : Form
     }
 
     private static string StyleSourceLabel(string style) =>
-        WikiArtApiClient.StyleSlugMap.ContainsKey(style) ? "ARTIC · WikiArt" : "ARTIC";
+        WikiArtApiClient.StyleSlugMap.ContainsKey(style) ? "WikiArt" : "";
 
     private static string ArtistSourceLabel(string artist) =>
-        WikiArtApiClient.ArtistSlugMap.ContainsKey(artist) ? "ARTIC · WikiArt" : "ARTIC";
+        WikiArtApiClient.ArtistSlugMap.ContainsKey(artist) ? "WikiArt" : "";
 
     private static string LabelForMinutes(double minutes)
     {

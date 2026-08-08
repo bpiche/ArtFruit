@@ -6,7 +6,6 @@ import UserNotifications
 // MARK: - Available sources
 
 let ArtFruitSources: [String] = [
-    "The Art Institute of Chicago",
     "WikiArt",
 ]
 
@@ -63,7 +62,6 @@ final class ArtFruitViewModel: ObservableObject {
         }
     }
 
-    private let apiClient = AICAPIClient()
     private let wikiArtClient = WikiArtAPIClient()
     private let wallpaperService = WallpaperService()
     private var timer: Timer?
@@ -199,18 +197,8 @@ final class ArtFruitViewModel: ObservableObject {
     // MARK: - Private helpers
 
     private func fetchOneArtwork() async throws -> AICArtwork {
-        let source: String
-        if selectedSources.isEmpty {
-            source = ArtFruitSources.randomElement()!
-        } else {
-            source = selectedSources.randomElement()!
-        }
-        NSLog("[ArtFruit] Fetching from source: \(source)")
-        if source == "WikiArt" {
-            return try await wikiArtClient.randomArtwork(styles: selectedStyles, artists: selectedArtists)
-        } else {
-            return try await apiClient.randomArtwork(styles: selectedStyles, artists: selectedArtists)
-        }
+        NSLog("[ArtFruit] Fetching from WikiArt...")
+        return try await wikiArtClient.randomArtwork(styles: selectedStyles, artists: selectedArtists)
     }
 
     private func scheduleTimer() {

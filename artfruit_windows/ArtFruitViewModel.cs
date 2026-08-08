@@ -11,7 +11,6 @@ namespace ArtFruit;
 public sealed class ArtFruitViewModel : IDisposable
 {
     private readonly HttpClient _http;
-    private readonly AicApiClient _aic;
     private readonly WikiArtApiClient _wikiArt;
     private readonly WallpaperService _wallpaper;
     private readonly System.Windows.Forms.Timer _timer;
@@ -43,14 +42,9 @@ public sealed class ArtFruitViewModel : IDisposable
 
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(60),
+            Timeout = TimeSpan.FromSeconds(120),
         };
-        // Use Add() instead of UserAgent.ParseAdd() so the raw string is sent verbatim.
-        // ParseAdd() rejects the '+' in the URL comment and can silently drop the header,
-        // leaving requests with no User-Agent which causes a 403 from the AIC API.
-        _http.DefaultRequestHeaders.Add("User-Agent", "ArtFruit/1.0 (https://github.com/bpiche/ArtFruit)");
 
-        _aic = new AicApiClient(_http);
         _wikiArt = new WikiArtApiClient(_http);
         _wallpaper = new WallpaperService(_http);
 
@@ -290,21 +284,8 @@ public sealed class ArtFruitViewModel : IDisposable
 
     private async Task<Artwork> FetchOneArtworkAsync()
     {
-        string source;
-        if (SelectedSources.Count == 0)
-        {
-            source = ArtSources.All[_random.Next(ArtSources.All.Count)];
-        }
-        else
-        {
-            var list = SelectedSources.ToList();
-            source = list[_random.Next(list.Count)];
-        }
-
-        Log.Info($"Fetching from source: {source}");
-        return source == ArtSources.WikiArt
-            ? await _wikiArt.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true)
-            : await _aic.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true);
+        Log.Info("Fetching from WikiArt...");
+        return await _wikiArt.RandomArtworkAsync(SelectedStyles, SelectedArtists).ConfigureAwait(true);
     }
 
     private void SetCurrent(Artwork artwork)

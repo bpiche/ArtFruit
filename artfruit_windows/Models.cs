@@ -16,12 +16,10 @@ public sealed class NoArtworksFoundException : Exception
 /// <summary>Names of the art sources the user can enable in Preferences.</summary>
 public static class ArtSources
 {
-    public const string ArtInstituteOfChicago = "The Art Institute of Chicago";
     public const string WikiArt = "WikiArt";
 
     public static readonly IReadOnlyList<string> All = new[]
     {
-        ArtInstituteOfChicago,
         WikiArt,
     };
 }

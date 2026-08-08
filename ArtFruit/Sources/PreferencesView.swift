@@ -8,13 +8,11 @@ struct PreferencesView: View {
     @State private var selectedTab: Tab = .general
     @State private var pendingStyles: Set<String> = []
     @State private var applied = false
-    @State private var pendingSources: Set<String> = []
-    @State private var sourcesApplied = false
     @State private var pendingArtists: Set<String> = []
     @State private var artistsApplied = false
 
     enum Tab {
-        case general, style, artists, sources
+        case general, style, artists
     }
 
     var body: some View {
@@ -24,11 +22,6 @@ struct PreferencesView: View {
             generalTab
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(Tab.general)
-
-            // MARK: Sources tab
-            sourcesTab
-                .tabItem { Label("Sources", systemImage: "photo.on.rectangle.angled") }
-                .tag(Tab.sources)
 
             // MARK: Style tab
             styleTab
@@ -43,7 +36,6 @@ struct PreferencesView: View {
         .frame(width: 340, height: 370)
         .onAppear {
             pendingStyles = viewModel.selectedStyles
-            pendingSources = viewModel.selectedSources
             pendingArtists = viewModel.selectedArtists
         }
     }
@@ -103,7 +95,6 @@ struct PreferencesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(AICAvailableStyles, id: \.self) { style in
-                        let enabled = isStyleEnabled(style)
                         HStack(spacing: 0) {
                             Toggle(isOn: Binding(
                                 get: { pendingStyles.contains(style) },
@@ -119,14 +110,12 @@ struct PreferencesView: View {
                                     .font(.system(size: 12))
                             }
                             .toggleStyle(.checkbox)
-                            .disabled(!enabled)
 
                             Spacer()
 
                             Text(styleSourceLabel(style))
                                 .font(.system(size: 10))
                                 .foregroundColor(.secondary)
-                                .opacity(enabled ? 1.0 : 0.4)
                         }
                     }
                 }
@@ -155,66 +144,6 @@ struct PreferencesView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(pendingStyles == viewModel.selectedStyles)
-            }
-        }
-        .padding(20)
-    }
-
-    // MARK: - Sources tab content
-
-    private var sourcesTab: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Fetch artwork from selected sources. Leave all unchecked for all sources.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(ArtFruitSources, id: \.self) { source in
-                    Toggle(isOn: Binding(
-                        get: { pendingSources.contains(source) },
-                        set: { checked in
-                            if checked {
-                                pendingSources.insert(source)
-                            } else {
-                                pendingSources.remove(source)
-                            }
-                        }
-                    )) {
-                        Text(source)
-                            .font(.system(size: 12))
-                    }
-                    .toggleStyle(.checkbox)
-                }
-            }
-            .padding(.vertical, 4)
-
-            Spacer()
-
-            Divider()
-
-            HStack {
-                Button("Clear All") {
-                    pendingSources.removeAll()
-                }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(sourcesApplied ? "Applied ✓" : "Apply") {
-                    viewModel.selectedSources = pendingSources
-                    viewModel.fetchAndApplyArtwork()
-                    withAnimation { sourcesApplied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        sourcesApplied = false
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(pendingSources == viewModel.selectedSources)
             }
         }
         .padding(20)
@@ -298,20 +227,11 @@ struct PreferencesView: View {
 
     /// Short badge shown to the right of each style row.
     private func styleSourceLabel(_ style: String) -> String {
-        WikiArtStyleSlugMap[style] != nil ? "ARTIC · WikiArt" : "ARTIC"
+        WikiArtStyleSlugMap[style] != nil ? "WikiArt" : ""
     }
 
     /// Short badge shown to the right of each artist row.
     private func artistSourceLabel(_ artist: String) -> String {
-        WikiArtArtistSlugMap[artist] != nil ? "ARTIC · WikiArt" : "ARTIC"
-    }
-
-    /// Returns false when every source that supports this style is unchecked in pendingSources.
-    private func isStyleEnabled(_ style: String) -> Bool {
-        guard !pendingSources.isEmpty else { return true } // all sources active
-        let aicActive    = pendingSources.contains("The Art Institute of Chicago")
-        let wikiActive   = pendingSources.contains("WikiArt")
-        let hasWikiArt   = WikiArtStyleSlugMap[style] != nil
-        return hasWikiArt ? (aicActive || wikiActive) : aicActive
+        WikiArtArtistSlugMap[artist] != nil ? "WikiArt" : ""
     }
 }

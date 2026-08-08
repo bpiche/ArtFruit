@@ -63,7 +63,18 @@ jobs:
           body: |
             ## ArtFruit ${{ github.ref_name }}
 
-            ### What's new in 1.1.4
+            ### What's new in 1.1.5
+
+            - **WikiArt is now the sole artwork source** — The Art Institute of Chicago
+              API was removed. The AIC's image delivery server blocked non-browser
+              User-Agents, making reliable operation impossible without spoofing headers.
+              WikiArt has a much larger public-domain catalogue and no such restrictions.
+            - **Sources tab removed** from Preferences on both macOS and Windows — with
+              only one source there's nothing to choose between, so the tab was cleaned up.
+            - **Style and Artist badges** simplified — labels now show **WikiArt** where
+              supported, or nothing, instead of the old ARTIC / ARTIC · WikiArt distinction.
+
+            ### Previously, in 1.1.4
 
             - **Fixed: "ArtFruit.app is damaged and can't be opened" on macOS** — The
               build assembled the app bundle without re-signing it, leaving an invalid
@@ -73,13 +84,6 @@ jobs:
               follows the normal **Open Anyway** flow described below.
             - macOS install instructions updated for macOS Sequoia and later, where the
               old "right-click ▸ Open" shortcut no longer works.
-
-            > **If you downloaded 1.1.3 or earlier and hit the "damaged" error, this
-            > release fixes it — no Terminal commands needed.**
-
-            ### Previously, in 1.1.3
-
-            - **Artist filter — Windows** — The Preferences window now has an **Artists** tab on Windows, matching the feature already available on macOS. Check one or more artists to limit wallpapers to their work. Artists available in both the Art Institute of Chicago and WikiArt are tagged **ARTIC · WikiArt**; others are tagged **ARTIC**. Leave all unchecked to show artwork from any artist.
 
             ---
 
